@@ -113,4 +113,6 @@ This codebase supports research in:
 This is a research project. For collaboration inquiries, please ensure compliance with medical data privacy regulations and institutional review board requirements.
 ## License
 This project contains medical research data and code. Please respect patient privacy and institutional guidelines when using or referencing this work.
+
+
 _This project is part of ongoing research into trigeminal sensitivity and related medical factors. All patient data has been anonymized in accordance with medical research standards._
