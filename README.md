@@ -27,12 +27,6 @@ This project analyzes medical data related to trigeminal sensitivity, focusing o
 ├── 📂 Matlab                            # MATLAB analysis scripts (future)
 └── 📄 README.md                         # This file
 ```
-```
-
-When viewed on GitHub, this will render as an actual **tree diagram block** with proper alignment, not as inline text.  
-
-Do you also want me to optimize the spacing so that all comments align perfectly in one column (like a pretty-printed tree)?
-                     # This file
 
 ## Key Features
 ### 🚬 Smoking Analysis (`smoking_overview.R`)
