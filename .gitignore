@@ -5,4 +5,5 @@
 read_and_explore_data.R
 *.svg
 *.Rproj
+.idea
 
