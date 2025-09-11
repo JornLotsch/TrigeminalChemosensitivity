@@ -43,11 +43,11 @@ for variable in TrigeminalVariableNames:
         # 1. All cases (original name)
         explore_tukey_lop(data=data_subset)
         # 2. Cases up to 559, renamed
-        data_first559 = data_subset.loc[:559].to_frame().rename(columns={"CO2": "CO2_first559"})
-        explore_tukey_lop(data=data_first559["CO2_first559"])
+        data_first559 = data_subset.loc[:548].to_frame().rename(columns={"CO2": "CO2_first549"})
+        explore_tukey_lop(data=data_first559["CO2_first549"])
         # 3. Cases from 559 to end, renamed
-        data_last559 = data_subset.loc[559:].to_frame().rename(columns={"CO2": "CO2_560toLast"})
-        explore_tukey_lop(data=data_last559["CO2_560toLast"])
+        data_last559 = data_subset.loc[548:].to_frame().rename(columns={"CO2": "CO2_550toLast"})
+        explore_tukey_lop(data=data_last559["CO2_550toLast"])
     else:
         # All cases for other variables
         explore_tukey_lop(data=data_subset)
