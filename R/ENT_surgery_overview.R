@@ -144,8 +144,8 @@ mutate(
   ) %>%
 # Replace year
 mutate(year = year_new) %>%
-  select(-year_new) # %>%
-# filter(!is.na(desc) & desc != "")
+  dplyr::select(-year_new) %>%
+  dplyr::filter(!is.na(desc) & desc != "")
 
 
 translation_map <- c(
@@ -281,7 +281,7 @@ one_hot_full <- all_rows %>%
   arrange(row_id)
 
 # Optionally drop the row_id if unneeded or rename
-one_hot_full <- one_hot_full %>% select(-row_id)
+one_hot_full <- one_hot_full %>% dplyr::select(-row_id)
 
 print(dim(one_hot_full)) # Should be 1001 rows
 print(head(one_hot_full))
@@ -343,7 +343,7 @@ if (order_plot) {
 set.seed(42)
 
 # Generate plot
-ggplot() +
+p_ENT_surgery <- ggplot() +
 # Vertical color stripes alternating ivory2 and white background
 geom_rect(data = stripe_df,
             aes(xmin = xmin, xmax = xmax, ymin = -Inf, ymax = Inf),
@@ -380,3 +380,7 @@ geom_hline(yintercept = seq(min_year, max(long_df_fixed$year_plot, na.rm = TRUE)
              color = "grey80",
              size = 0.3,
              linetype = "dashed")
+
+p_ENT_surgery
+
+ggsave(paste0("p_ENT_surgery", ".svg"), p_ENT_surgery, width = 12, height = 12)

@@ -243,7 +243,7 @@ all_rows <- tibble(row_id = 1:nrow(result_chronic_and_neurological_eng))
 one_hot_full <- all_rows %>%
   left_join(one_hot_partial, by = "row_id") %>%
   replace(is.na(.), 0) %>%
-  select(-row_id)
+  dplyr::select(-row_id)
 
 # one_hot_full now has 1001 rows, all diseases as columns, zeros for rows with no diseases
 print(dim(one_hot_full))
@@ -330,7 +330,7 @@ long_df <- long_df %>%
 set.seed(42)
 
 # Generate plot
-ggplot() +
+p_chronic_disseases <- ggplot() +
   geom_rect(data = stripe_df,
             aes(xmin = xmin, xmax = xmax, ymin = -Inf, ymax = Inf),
             fill = rep(c("ivory2", "white"), length.out = nrow(stripe_df)),
@@ -359,3 +359,7 @@ scale_color_manual(values = c("TRUE" = "red", "FALSE" = "black"),
   ) +
   geom_hline(yintercept = seq(min_year, max(long_df$year_plot, na.rm = TRUE)),
              color = "grey80", size = 0.3, linetype = "dashed")
+
+p_chronic_disseases
+
+ggsave(paste0("p_chronic_disseases", ".svg"), p_chronic_disseases, width = 12, height = 12)

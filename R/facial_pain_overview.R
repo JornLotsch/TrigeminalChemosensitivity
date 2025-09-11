@@ -86,7 +86,7 @@ result_df <- facial_pain_data %>%
     start_year = date_matrix[, "start"],
     end_year = date_matrix[, "end"]
   ) %>%
-  select(Gesichtsschmerzen, start_year, end_year, R26, R27)
+  dplyr::select(Gesichtsschmerzen, start_year, end_year, R26, R27)
 
 result_df$Prb <- trigeminale_daten_table1$Probandennummer
 
@@ -159,7 +159,7 @@ plot_df <- result_df %>%
   )
 
 # Plot facial pain duration bars colored by combined pain frequency and sensation
-ggplot(plot_df, aes(
+p_facial_pain <- ggplot(plot_df, aes(
   y = fct_rev(person),
   xmin = bar_start,
   xmax = bar_end,
@@ -173,5 +173,16 @@ ggplot(plot_df, aes(
     color = "Pain frequency and sensation",
     title = "Facial pain duration colored by frequency and sensation"
   ) +
-  theme_minimal(base_size = 11) +
-  guides(color = guide_legend(ncol = 1))
+  theme_minimal(base_size = 9) +
+  theme(
+    legend.position.inside = TRUE, legend.position = c(.15, .8), # Position at c(.1, .9)
+    legend.title = element_text(size = 5), # Smaller title text
+    legend.text = element_text(size = 6), # Smaller label text
+    legend.key.size = unit(0.3, "cm") # Smaller legend keys
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 1), ncol = 1))
+
+
+p_facial_pain
+
+ggsave(paste0("p_facial_pain", ".svg"), p_facial_pain, width = 9, height = 9)

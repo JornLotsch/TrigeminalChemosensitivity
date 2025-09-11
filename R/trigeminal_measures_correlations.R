@@ -1,22 +1,26 @@
 # Load required libraries
-library(dplyr)
-library(tidyr)
-library(stringr)
-library(ggplot2)
-library(lubridate)
-library(forcats)
-library(readxl)
-library(scales)
-library(reshape2)
-library(ggpmisc)
-library(MASS)       # robust linear model for geom_smooth
-library(purrr)
-library(ComplexHeatmap)
 library(circlize)
-library(grid)
+library(ComplexHeatmap)
+library(dplyr)
+library(forcats)
+library(ggpmisc)
+library(ggplot2)
 library(ggthemes)
+library(grid)
+library(lubridate)
+library(MASS) # robust linear model for geom_smooth
+library(purrr)
+library(readxl)
+library(reshape2)
+library(scales)
+library(stringr)
+library(tidyr)
 library(viridis)
-library(opGMMassessment)  # assuming needed for something not shown here
+
+
+# Switches
+remove_censored <- FALSE
+scale_0_100 <- FALSE
 
 # ----------------------------
 # Define zero-invariant log transform function
@@ -35,6 +39,17 @@ slog <- function(x, base = 10) {
   }
 }
 
+scaleRange <- function(x, minX, maxX) {
+  x_new <- (maxX - minX) * (x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE)) + minX
+  return(x_new)
+}
+
+scale01minmax <- function(x, minX, maxX) {
+  x_new <- (x - minX) / (maxX - minX)
+  return(x_new)
+}
+
+
 # ----------------------------
 # Read Excel file with trigeminal sensitivity data
 trigeminale_daten_table1 <- read_excel(
@@ -45,9 +60,44 @@ trigeminale_daten_table1 <- read_excel(
 # Variables of interest related to facial pain
 trigeminal_measures_vars <- c("R28", "Lateralisierung (x/20)", "CO2-Schwelle")
 
+
 # Subset data frame and rename columns for clarity
 trigeminal_measures_data <- trigeminale_daten_table1[, trigeminal_measures_vars]
 names(trigeminal_measures_data) <- c("AmmoLa_intensity", "Lateralization", "CO2_threshold")
+
+# Check how many data is censored
+max_vals <- c(100, 20, 2000)
+counts <- apply(trigeminal_measures_data, 2, function(x) sum(!is.na(x)))
+censored <- sapply(seq_along(max_vals), function(i) sum(trigeminal_measures_data[[i]] == max_vals[i], na.rm = TRUE))
+percentage_censored <- (censored / counts) * 100
+print(percentage_censored)
+
+# And again, for the change in CO2 measuring
+subset1 <- trigeminal_measures_data[1:549,]
+counts1 <- apply(subset1, 2, function(x) sum(!is.na(x)))
+censored1 <- sapply(seq_along(max_vals), function(i) sum(subset1[[i]] == max_vals[i], na.rm = TRUE))
+percentage_censored1 <- (censored1 / counts1) * 100
+print(percentage_censored1)
+
+subset2 <- trigeminal_measures_data[549:nrow(trigeminal_measures_data),]
+counts2 <- apply(subset2, 2, function(x) sum(!is.na(x)))
+censored2 <- sapply(seq_along(max_vals), function(i) sum(subset2[[i]] == max_vals[i], na.rm = TRUE))
+percentage_censored2 <- (censored2 / counts2) * 100
+print(percentage_censored2)
+
+# Optionally scale all variables 0 - 100
+if (scale_0_100) {
+  trigeminal_measures_data$Lateralization <- scale01minmax(trigeminal_measures_data$Lateralization, minX = 0, maxX = 20) * 100
+  trigeminal_measures_data$CO2_threshold <- scale01minmax(trigeminal_measures_data$CO2_threshold, minX = 0, maxX = 2000) * 100
+}
+
+# Optionally: Replace all censored data with NA
+
+if (remove_censored) {
+  for (i in seq_along(max_vals)) {
+    trigeminal_measures_data[[i]][trigeminal_measures_data[[i]] == max_vals[i]] <- NA
+  }
+}
 
 # Save raw trigeminal measures data as CSV for record keeping
 write.csv(trigeminal_measures_data, "trigeminal_measures_data.csv")
@@ -55,16 +105,59 @@ write.csv(trigeminal_measures_data, "trigeminal_measures_data.csv")
 # ----------------------------
 # Define transformation functions
 reflect_log <- function(x) slog(max(x, na.rm = TRUE) + 1 - x)
-square <- function(x) x^2
+reflect_log_unflipped <- function(x) - slog(max(x, na.rm = TRUE) + 1 - x)
+square <- function(x) x ^ 2
 log_transform <- function(x) slog(x)
 
 # Apply transformations and add new columns
 trigeminal_measures_data <- trigeminal_measures_data %>%
   mutate(
-    AmmoLa_intensity_reflect_slog = reflect_log(AmmoLa_intensity),
+    AmmoLa_intensity_reflect_slog = reflect_log_unflipped(AmmoLa_intensity),
     Lateralization_square = square(Lateralization),
     CO2_threshold_slog = log_transform(CO2_threshold)
   )
+
+
+# Check which one correlates with age
+trigeminal_measures_data_age <- trigeminal_measures_data
+trigeminal_measures_data_age$age <- as.numeric(trigeminale_daten_table1$Alter)
+corr_mat_age <- cor(trigeminal_measures_data_age, use = "pairwise.complete.obs", method = "pearson")
+
+# Check which one is sex different
+trigeminal_measures_data_sex <- trigeminal_measures_data
+trigeminal_measures_data_sex$sex <- as.factor(trigeminale_daten_table1$Geschlecht)
+sex_diff_trig <- apply(trigeminal_measures_data_sex[, 1:(ncol(trigeminal_measures_data_sex) - 1)], 2, function(x) kruskal.test(x ~ as.factor(trigeminal_measures_data_sex$sex)))
+
+variables <- colnames(trigeminal_measures_data_sex)[colnames(trigeminal_measures_data_sex) != "sex"]
+
+sex_stats <- lapply(variables, function(var) {
+  x <- trigeminal_measures_data_sex[[var]]
+  s <- trigeminal_measures_data_sex$sex
+  # Remove missing for fair comparison
+  idx <- complete.cases(x, s)
+  x <- x[idx]
+  s <- s[idx]
+  # Parametric ANOVA for eta squared (proportion variance explained by sex)
+  aovmod <- aov(x ~ s)
+  ss_total <- sum((x - mean(x)) ^ 2)
+  ss_between <- sum(tapply(x, s, function(g) length(g) * (mean(g) - mean(x)) ^ 2))
+  eta2 <- ss_between / ss_total
+  # Non-parametric p-value as reference
+  kruskal_p <- tryCatch(kruskal.test(x ~ s)$p.value, error = function(e) NA)
+  n <- length(x)
+  data.frame(
+    variable = var,
+    eta2 = eta2,
+    kruskal_p = kruskal_p,
+    n = n
+  )
+})
+
+sex_stats_df <- bind_rows(sex_stats) %>%
+  arrange(desc(eta2))
+
+print(sex_stats_df)
+
 
 # ----------------------------
 # Plot distributions of non-CO2 related trigeminal measures
@@ -74,13 +167,13 @@ trigeminal_measures_data_long <- reshape2::melt(trigeminal_measures_data)
 trigeminal_measures_data_long_1 <- trigeminal_measures_data_long %>%
   filter(!str_detect(variable, "CO2"))
 
-ggplot(trigeminal_measures_data_long_1, aes(x = value)) +
+p_distribution_tigeminal_nonCO2 <- ggplot(trigeminal_measures_data_long_1, aes(x = value)) +
   geom_histogram(
     aes(y = after_stat(density)),
     bins = 30, fill = "lightblue", color = "white", alpha = 0.7
   ) +
   geom_density(color = "darkblue", size = 1) +
-  facet_wrap(~ variable, scales = "free") +
+  facet_wrap(~variable, scales = "free") +
   labs(
     title = "Distribution of non-CO2 related trigeminal measures",
     x = "Value",
@@ -94,9 +187,13 @@ ggplot(trigeminal_measures_data_long_1, aes(x = value)) +
   ) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.1)))
 
+p_distribution_tigeminal_nonCO2
+
+ggsave(paste0("p_distribution_tigeminal_nonCO2", ".svg"), p_distribution_tigeminal_nonCO2, width = 10, height = 10)
+
 # ----------------------------
 # Prepare CO2-related data and subsets for plotting
-trigeminal_measures_data_CO2 <- trigeminal_measures_data[,str_detect(names(trigeminal_measures_data), "CO2") ]
+trigeminal_measures_data_CO2 <- trigeminal_measures_data[, str_detect(names(trigeminal_measures_data), "CO2")]
 
 # Add row index to original CO2 data
 trigeminal_measures_data_CO2 <- trigeminal_measures_data_CO2 %>%
@@ -115,11 +212,11 @@ trigeminal_measures_data_CO2_long <- trigeminal_measures_data_CO2 %>%
   )
 
 # Plot with facets by variable and subset_group
-ggplot(trigeminal_measures_data_CO2_long, aes(x = value)) +
+p_distribution_tigeminal_CO2 <- ggplot(trigeminal_measures_data_CO2_long, aes(x = value)) +
   geom_histogram(aes(y = after_stat(density)),
                  fill = "lightblue", color = "white", alpha = 0.7) +
   geom_density(color = "darkblue", size = 1) +
-  facet_wrap(subset_group * variable ~., scales = "free", ncol = 2) +
+  facet_wrap(subset_group * variable ~ ., scales = "free", ncol = 2) +
   labs(
     title = "Distribution of CO2-related trigeminal measures, split by procedure",
     x = "Value",
@@ -133,84 +230,108 @@ ggplot(trigeminal_measures_data_CO2_long, aes(x = value)) +
   ) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.1)))
 
+p_distribution_tigeminal_CO2
+
+ggsave(paste0("p_distribution_tigeminal_CO2", ".svg"), p_distribution_tigeminal_CO2, width = 10, height = 10)
+
 # ----------------------------
-# Prepare transformed data for correlation analysis and plotting
-trigeminal_measures_data_transformed <- trigeminal_measures_data[,c("AmmoLa_intensity_reflect_slog", "Lateralization_square", "CO2_threshold_slog")]
-# Step 1: Replace CO2_threshold_slog values with NA for first 549 rows
+# Analyse and plot correlations as matrix
+# ------------ DATA PREP -----------------
+trigeminal_measures_data_transformed <- trigeminal_measures_data[, c("AmmoLa_intensity_reflect_slog", "Lateralization_square", "CO2_threshold_slog")]
 trigeminal_measures_data_transformed <- trigeminal_measures_data_transformed %>%
   mutate(CO2_threshold_slog = ifelse(row_number() <= 549, NA, CO2_threshold_slog))
 
-# Step 2: Define variable pairs for plotting
 var_pairs <- list(
   c("AmmoLa_intensity_reflect_slog", "Lateralization_square"),
   c("AmmoLa_intensity_reflect_slog", "CO2_threshold_slog")
 )
 
-# Step 3: Create a combined data frame for long plotting of pairs
 plot_list <- map(var_pairs, function(vars) {
   df <- trigeminal_measures_data_transformed[, vars]
   names(df) <- c("x", "y")
   df$pair <- paste(vars, collapse = " vs ")
   df
 })
-
 plot_df <- bind_rows(plot_list)
 
-# Compute correlation stats for annotation
+# ... previous data prep ...
+
+# --- Compose safe plotmath expressions for annotation ---
+get_eq_label <- function(x, y) {
+  mod <- MASS::rlm(y ~ x)
+  coefs <- as.numeric(coef(mod))
+  b0 <- formatC(coefs[1], digits = 2, format = "f")
+  b1 <- formatC(coefs[2], digits = 2, format = "f")
+  signb1 <- ifelse(coefs[2] < 0, "-", "+")
+  yhat <- predict(mod)
+  r2 <- 1 - sum((y - yhat) ^ 2) / sum((y - mean(y)) ^ 2)
+  r2f <- formatC(r2, digits = 2, format = "f")
+  # Proper plotmath: don't put *','* before a new == !
+  eq <- sprintf(
+    "italic(y)==%s %s %s*italic(x) *','~italic(R)^2==%s",
+    b0, signb1, abs(as.numeric(b1)), r2f
+  )
+  eq
+}
+
+# Cor label needs same! Use only == ... for r, p
 cor_stats <- map_dfr(var_pairs, function(vars) {
   x <- trigeminal_measures_data_transformed[[vars[1]]]
   y <- trigeminal_measures_data_transformed[[vars[2]]]
   cor_test <- cor.test(x, y, use = "complete.obs")
-
   data.frame(
     pair = paste(vars, collapse = " vs "),
-    label = sprintf("r = %.2f, p = %.3g", cor_test$estimate, cor_test$p.value),
-    # Position near top-left inside panel (numeric)
-    x = min(x, na.rm = TRUE) + 0.05 * diff(range(x, na.rm = TRUE)),
-    y = max(y, na.rm = TRUE) - 0.10 * diff(range(y, na.rm = TRUE))
+    label = sprintf("italic(r)==%.2f * ','~italic(p)==%.3g",
+                    cor_test$estimate, cor_test$p.value),
+    stringsAsFactors = FALSE
   )
 })
 
-formula_rlm <- y ~ x
-# Custom labeller to display y-variable name as strip label
-custom_labeller <- function(variable, value) {
-  sapply(value, function(x) {
-    # Extract y variable from "x_var vs y_var"
-    y_var <- strsplit(x, " vs ")[[1]][2]
-    return(y_var)
-  })
-}
+eq_stats <- map2_dfr(var_pairs, seq_along(var_pairs), function(vars, i) {
+  x <- trigeminal_measures_data_transformed[[vars[1]]]
+  y <- trigeminal_measures_data_transformed[[vars[2]]]
+  idx <- complete.cases(x, y)
+  eq <- get_eq_label(x[idx], y[idx])
+  data.frame(pair = paste(vars, collapse = " vs "), eq_label = eq, stringsAsFactors = FALSE)
+})
 
+# --- Combine with ~ for math, no comma except in *','* ---
+full_stats_df <- left_join(eq_stats, cor_stats, by = "pair") %>%
+  mutate(top_label = paste(eq_label, label, sep = "~','~"))
 
+# --- rest as before ---
+facet_tops <- plot_df %>%
+  group_by(pair) %>%
+  summarise(
+    x_label = min(x, na.rm = TRUE),
+    y_label = max(y, na.rm = TRUE) + 0.07 * diff(range(y, na.rm = TRUE))
+  )
+
+label_df <- left_join(full_stats_df, facet_tops, by = "pair")
 p <- ggplot(plot_df, aes(x = x, y = y)) +
   geom_point(alpha = 0.6) +
   geom_smooth(
     method = "rlm",
-    formula = formula_rlm,
+    formula = y ~ x,
     se = TRUE,
     fullrange = FALSE,
     color = "darkblue",
     fill = "lightblue",
-    alpha = 0.25
-  ) +
-  stat_poly_eq(
-    aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")),
-    formula = formula_rlm,
-    parse = TRUE,
-    size = 4,
-    label.x.npc = "left",
-    label.y.npc = 0.15,
-    color = "red"
+    alpha = 0.22
   ) +
   geom_text(
-    data = cor_stats,
-    aes(x = x, y = y, label = label),
-    inherit.aes = FALSE,
-    hjust = 0, vjust = 1,
+    data = label_df,
+    aes(x = x_label, y = y_label, label = top_label),
+    parse = TRUE,
+    color = "red",
     size = 4.5,
-    color = "blue"
+    hjust = 0,
+    vjust = 0.2,
+    inherit.aes = FALSE
   ) +
-  facet_grid(y_var ~ x_var, scales = "free", labeller = labeller(pair = custom_labeller)) +
+  facet_wrap(~pair, scales = "free", labeller = labeller(pair = function(x) {
+    sapply(x, function(p) strsplit(p, " vs ")[[1]][2])
+  })) +
   labs(
     title = "Pairwise Relationships of Trigeminal Measures",
     x = "AmmoLa_intensity_reflect_slog",
@@ -221,18 +342,8 @@ p <- ggplot(plot_df, aes(x = x, y = y)) +
     plot.title = element_text(face = "bold", size = 20, hjust = 0),
     strip.text = element_text(face = "bold", size = 14),
     axis.title.y = element_text(size = 12),
-    # Custom y-axis label per facet
     strip.background = element_blank()
-  ) +
-  # Custom function to set dynamic y-axis label per facet via ggplot2 vignettes workaround
-  facet_wrap(~ pair, scales = "free", labeller = labeller(pair = function(x) {
-    sapply(x, function(p) {
-      # Extract y_var part for label
-      y_var <- strsplit(p, " vs ")[[1]][2]
-      return(y_var)
-    })
-  }))
-
+  )
 print(p)
 
 
@@ -248,7 +359,8 @@ all_measurs_correlations <- trigeminal_measures_data %>%
 corr_mat <- cor(all_measurs_correlations, use = "pairwise.complete.obs", method = "pearson")
 
 # Define NYT-inspired color palette for correlation heatmap
-breaks <- c(0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.9, 1)
+breaks <- c(-1, -0.9, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, -0.05, -0.02, -0.01, 0,
+            0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.9, 1)
 nyt_colors <- c(
   "ghostwhite",
   "#fbfbfb",
@@ -257,12 +369,13 @@ nyt_colors <- c(
   "#add0fa",
   "#7bb8fa",
   "dodgerblue2",
-  "#041a58",
-  "#041a58",
-  "#041a58",
-  "#041a58",
-  "#03124a"
+  "#041a58"
 )
+nyt_colors <- c(
+  rev(nyt_colors), # reversed original color vector for negative values
+  nyt_colors # original color vector for positive values
+)
+
 color_vec <- colorRampPalette(nyt_colors)(length(breaks))
 
 col_fun <- colorRamp2(breaks, color_vec)
@@ -275,10 +388,12 @@ text_color_fun <- function(fill_color) {
 }
 
 # Create correlation heatmap with values and adaptive text color
-ht <- Heatmap(
+create_heatmap_trig <- function() {
+  ht <- Heatmap(
   corr_mat,
   name = "Correlation",
   col = col_fun,
+  na_col = "white",
   cluster_rows = TRUE,
   clustering_method_rows = "ward.D2",
   show_row_dend = TRUE,
@@ -304,21 +419,36 @@ ht <- Heatmap(
   ),
   top_annotation = NULL,
   show_heatmap_legend = TRUE
-)
+  )
 
-# Render heatmap on a new page
-grid.newpage()
+  # Render heatmap on a new page
+  grid.newpage()
 
-draw(
+  draw(
   ht,
   heatmap_legend_side = "bottom"
-)
+  )
 
-# Add a bold, left-aligned title manually above heatmap
-grid.text(
+  # Add a bold, left-aligned title manually above heatmap
+  grid.text(
   "Correlation matrix",
-  x = unit(0, "npc") + unit(4, "mm"),   # left margin
-  y = unit(1, "npc") - unit(4, "mm"),   # top margin
+  x = unit(0, "npc") + unit(4, "mm"), # left margin
+  y = unit(1, "npc") - unit(4, "mm"), # top margin
   just = c("left", "top"),
   gp = gpar(fontsize = 16, fontface = "bold")
-)
+  )
+}
+
+###############################################################################
+# --- Export Plot as SVG ---
+###############################################################################
+
+# Capture the heatmap graphic output as a grid object for export
+gp <- grid.grabExpr(create_heatmap_trig())
+grid.draw(gp)
+
+# Export the plot to an SVG file with specified dimensions
+svg(paste0("trigeminal_correlation_heatmap", ".svg"), width = 8, height = 8)
+grid.draw(gp)
+dev.off()
+

@@ -88,7 +88,7 @@ convert_mixed_dates <- function(dates) {
 
   # Handle two-digit years for Winter, Frühjahr, Sommer
   handle_two_digit_year <- function(ind, season_name, month_num) {
-    if(length(ind) > 0) {
+    if (length(ind) > 0) {
       for (i in ind) {
         year_suffix <- as.numeric(sub(paste0("^", season_name, " ?"), "", dates_clean[i]))
         year <- ifelse(year_suffix >= 50, 1900 + year_suffix, 2000 + year_suffix)
@@ -220,11 +220,11 @@ plot_data <- plot_data %>%
   left_join(min_values, by = "id")
 
 # Plot: lines and points per case, color scaled by minimum olfactory function
-ggplot(plot_data, aes(x = Date, y = R_value, group = as.factor(id), color = min_R)) +
+p_Covid <- ggplot(plot_data, aes(x = Date, y = R_value, group = as.factor(id), color = min_R)) +
   geom_point() +
   geom_line() +
   scale_color_gradient(low = "cornsilk3", high = "ivory4", na.value = "grey80") +
-  theme_minimal(base_size = 8) +
+  theme_light(base_size = 8) +
   labs(
     x = "Date",
     y = "Olfactory function (%)",
@@ -239,3 +239,7 @@ ggplot(plot_data, aes(x = Date, y = R_value, group = as.factor(id), color = min_
     legend.position.inside = TRUE,
     legend.position = c(0.9, 0.15)
   )
+
+p_Covid
+
+ggsave(paste0("p_Covid", ".svg"), p_Covid, width = 12, height = 12)

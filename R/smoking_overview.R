@@ -18,19 +18,19 @@ col_since <- "Wenn ja: Seit wann?"
 # Detect and swap values of columns if needed based on year presence
 trigeminale_daten_table1_fixed <- trigeminale_daten_table1_fixed %>%
   mutate(
-    # Check if the smoking count column contains a year (likely swapped with date column)
+# Check if the smoking count column contains a year (likely swapped with date column)
     cigs_is_year = suppressWarnings(as.numeric(.data[[col_cigs]])) > 1900,
     since_is_year = suppressWarnings(as.numeric(.data[[col_since]])) > 1900,
     swapped = cigs_is_year & !since_is_year
   ) %>%
   mutate(
     temp = ifelse(swapped, .data[[col_cigs]], .data[[col_since]]),
-    # Swap the values if swap condition is true
+# Swap the values if swap condition is true
     !!col_cigs := ifelse(swapped, .data[[col_since]], .data[[col_cigs]]),
     !!col_since := ifelse(swapped, temp, .data[[col_since]])
   ) %>%
-  # Remove intermediate helper columns
-  select(-c(cigs_is_year, since_is_year, swapped, temp))
+# Remove intermediate helper columns
+dplyr::select(-c(cigs_is_year, since_is_year, swapped, temp))
 
 # Function to extract all 4-digit years from strings in a vector
 extract_years <- function(x) {
@@ -153,23 +153,28 @@ smoker_df <- years_df_cleaned %>%
     person = row_number()
   )
 
+rownames(smoker_df) <- smoker_df$rowid
+
 # Plot smoking duration bars colored by mean daily cigarettes
-ggplot(smoker_df, aes(
-  y = reorder(factor(person), -person),
+p_smoking <- ggplot(smoker_df, aes(
+  y = reorder(interaction(factor(rowid), - rowid), mean_cigs),
   xmin = bar_start,
   xmax = bar_end,
   color = mean_cigs
 )) +
   geom_errorbarh(height = 0.3, linewidth = 2) +
-  #scale_color_viridis_c(option = "C", end = 0.9, na.value = "grey80") +
-  labs(
+#scale_color_viridis_c(option = "C", end = 0.9, na.value = "grey80") +
+labs(
     x = "Year",
     y = "Person",
     color = "Cigarettes/Day",
     title = "Active Smokers' Smoking Duration Colored by Mean Cigarettes/Day"
   ) +
-  theme_minimal(base_size = 11) +
-  # 1. Use other options of viridis with scale_color_viridis_c()
+  theme_minimal(base_size = 8) +
+  theme(legend.position.inside = TRUE, legend.position = c(.1, .5)) +
+  scale_y_discrete(labels = smoker_df$rowid) +
+
+# 1. Use other options of viridis with scale_color_viridis_c()
 #  scale_color_viridis_c(option = "magma")  # Warm perceptually-uniform palette
 #  scale_color_viridis_c(option = "inferno") # Dark, high-contrast palette
 # scale_color_viridis_c(option = "plasma")  # Purple-yellow palette
@@ -178,9 +183,14 @@ ggplot(smoker_df, aes(
 # # 2. Use ColorBrewer palettes with scale_color_distiller() (note these have less smooth gradients)
 # scale_color_distiller(palette = "YlGnBu")  # Yellow-Green-Blue palette
 # scale_color_distiller(palette = "RdYlBu")  # Diverging Red-Yellow-Blue palette
- # scale_color_distiller(palette = "PuRd")    # Purple-Red gradient
+# scale_color_distiller(palette = "PuRd")    # Purple-Red gradient
 #
 # # 4. Use base R gradients (less recommended but available)
- scale_color_gradient(low = "yellow", high = "red")
+scale_color_gradient(low = "yellow", high = "red")
 # scale_color_gradient2(low = "blue", mid = "white", high = "red", midpoint = median_value)
 #
+
+p_smoking
+
+ggsave(paste0("p_smoking", ".svg"), p_smoking, width = 12, height = 12)
+
