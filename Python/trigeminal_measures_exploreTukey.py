@@ -13,9 +13,7 @@ import os
 os.chdir("/home/joern/Aktuell/TrigeminalSensitivity/08AnalyseProgramme/Python/")
 
 import pandas as pd
-import numpy as np
 import copy
-from sklearn.preprocessing import StandardScaler
 
 from explore_tukey_lop import explore_tukey_lop
 
@@ -28,25 +26,28 @@ pfad_u3 = "09Originale/"
 filename = "trigeminal_measures_data.csv"
 
 trigeminal_measures_data_raw = pd.read_csv(pfad_o + pfad_r + filename, index_col=0)
-print(trigeminal_measures_data_raw )
-
+print(trigeminal_measures_data_raw)
 trigeminal_measures_data_raw = trigeminal_measures_data_raw.rename(columns={
     "R28": "ammo",
     "Lateralisierung (x/20)": "Lateralisierung",
     "CO2-Schwelle": "CO2"
 })
-
-
 ammo = trigeminal_measures_data_raw["ammo"]
 ammo_reflect = ammo.max(skipna=True) + 1 - ammo
-
 trigeminal_measures_data_raw["ammo_reflect"] = ammo_reflect
-
-
 TrigeminalVariableNames = trigeminal_measures_data_raw.columns
 
-for i, variable in enumerate(TrigeminalVariableNames):
+for variable in TrigeminalVariableNames:
     data_subset = copy.copy(trigeminal_measures_data_raw[variable])
-    explore_tukey_lop(data=data_subset)
-    
-    
+    if variable == "CO2":
+        # 1. All cases (original name)
+        explore_tukey_lop(data=data_subset)
+        # 2. Cases up to 559, renamed
+        data_first559 = data_subset.loc[:559].to_frame().rename(columns={"CO2": "CO2_first559"})
+        explore_tukey_lop(data=data_first559["CO2_first559"])
+        # 3. Cases from 559 to end, renamed
+        data_last559 = data_subset.loc[559:].to_frame().rename(columns={"CO2": "CO2_560toLast"})
+        explore_tukey_lop(data=data_last559["CO2_560toLast"])
+    else:
+        # All cases for other variables
+        explore_tukey_lop(data=data_subset)
