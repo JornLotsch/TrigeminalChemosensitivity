@@ -17,15 +17,17 @@ This project analyzes medical data related to trigeminal sensitivity, focusing o
 ```
 📂 .
 ├── 📂 R
-│   ├── 📄 smoking_overview.R            # Smoking history analysis and visualization
-│   ├── 📄 ENT_surgery_overview.R        # ENT surgical history analysis
-│   ├── 📄 facial_pain_overview.R        # Facial pain pattern analysis
-│   ├── 📄 chronic_diseases_overview.R   # Chronic disease analysis
-│   ├── 📄 covid_overview.R              # COVID-19 impact analysis
-│   └── 📄 ammo_distribution_analysis.R  # Statistical distribution analysis
-├── 📂 Python                            # Python analysis scripts (future)
-├── 📂 Matlab                            # MATLAB analysis scripts (future)
-└── 📄 README.md                         # This file
+│   ├── 📄 smoking_overview.R                   # Smoking history analysis and visualization
+│   ├── 📄 ENT_surgery_overview.R               # ENT surgical history analysis
+│   ├── 📄 facial_pain_overview.R               # Facial pain pattern analysis
+│   ├── 📄 chronic_diseases_overview.R          # Chronic disease analysis
+│   ├── 📄 covid_overview.R                     # COVID-19 impact analysis
+│   ├── 📄 trigeminal_measures_correlations.R   # Correlations of trigeminal measures
+│   └── 📄 ammo_distribution_analysis.R         # Statistical distribution analysis
+├── 📂 Python                                   # Python analysis scripts (future)
+│   ├── 📄 trigeminal_measures_exploreTukey.py  # Trigeminal distrib. and transformation
+├── 📂 Matlab                                   # MATLAB analysis scripts (option)
+└── 📄 README.md                                # This file
 ```
 
 ## Key Features
@@ -56,6 +58,21 @@ This project analyzes medical data related to trigeminal sensitivity, focusing o
 - Missing data handling strategies
 - Flexible visualization with multiple color schemes
 - Reproducible analysis with set seeds
+
+### 📈 Correlation Analysis (`trigeminal_measures_correlations.R`)
+- Comprehensive correlation analysis of trigeminal sensitivity measures
+- Statistical relationship exploration between different assessment methods
+- Multi-variable dependency analysis
+- Clinical measure validation and cross-validation
+
+### 🐍 Python Analysis (`trigeminal_measures_exploreTukey.py`)
+- Tukey ladder of powers exploratory data analysis
+- Advanced data transformation techniques
+- Systematic evaluation of multiple trigeminal sensitivity measures
+- Automated handling of data subsets (CO2 threshold analysis by time periods)
+- Integration with R-generated CSV data exports
+
+
 
 ## Requirements
 
