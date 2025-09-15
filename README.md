@@ -22,7 +22,7 @@ This project analyzes medical data related to trigeminal sensitivity, focusing o
 │   ├── 📄 facial_pain_overview.R               # Facial pain pattern analysis
 │   ├── 📄 chronic_diseases_overview.R          # Chronic disease analysis
 │   ├── 📄 covid_overview.R                     # COVID-19 impact analysis
-│   ├── 📄 trigeminal_measures_correlations.R   # Correlations of trigeminal measures
+│   ├── 📄 trigeminal_measures_distributions_correlations.R   # Distribution and correlation analysis of trigeminal measures
 │   └── 📄 ammo_distribution_analysis.R         # Statistical distribution analysis
 ├── 📂 Python                                   # Python analysis scripts (future)
 │   ├── 📄 trigeminal_measures_exploreTukey.py  # Trigeminal distrib. and transformation
@@ -59,8 +59,9 @@ This project analyzes medical data related to trigeminal sensitivity, focusing o
 - Flexible visualization with multiple color schemes
 - Reproducible analysis with set seeds
 
-### 📈 Correlation Analysis (`trigeminal_measures_correlations.R`)
-- Comprehensive correlation analysis of trigeminal sensitivity measures
+### 📈 Distribution and Correlation Analysis (`trigeminal_measures_distributions_correlations.R`)
+- Transformation of trigeminal sensitivity measures
+- Correlation analysis of trigeminal sensitivity measures
 - Statistical relationship exploration between different assessment methods
 - Multi-variable dependency analysis
 - Clinical measure validation and cross-validation

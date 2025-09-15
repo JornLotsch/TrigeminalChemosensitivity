@@ -8,7 +8,7 @@ library(ggplot2)
 library(ggthemes)
 library(grid)
 library(lubridate)
-library(MASS) # robust linear model for geom_smooth
+library(MASS)  # robust linear model for geom_smooth
 library(purrr)
 library(readxl)
 library(reshape2)
@@ -16,7 +16,7 @@ library(scales)
 library(stringr)
 library(tidyr)
 library(viridis)
-
+library(grid)
 
 # Switches
 remove_censored <- FALSE
@@ -40,7 +40,8 @@ slog <- function(x, base = 10) {
 }
 
 scaleRange <- function(x, minX, maxX) {
-  x_new <- (maxX - minX) * (x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE)) + minX
+  x_new <- (maxX - minX) * (x - min(x, na.rm = TRUE)) /
+    (max(x, na.rm = TRUE) - min(x, na.rm = TRUE)) + minX
   return(x_new)
 }
 
@@ -48,7 +49,6 @@ scale01minmax <- function(x, minX, maxX) {
   x_new <- (x - minX) / (maxX - minX)
   return(x_new)
 }
-
 
 # ----------------------------
 # Read Excel file with trigeminal sensitivity data
@@ -60,10 +60,87 @@ trigeminale_daten_table1 <- read_excel(
 # Variables of interest related to facial pain
 trigeminal_measures_vars <- c("R28", "Lateralisierung (x/20)", "CO2-Schwelle")
 
-
 # Subset data frame and rename columns for clarity
 trigeminal_measures_data <- trigeminale_daten_table1[, trigeminal_measures_vars]
 names(trigeminal_measures_data) <- c("AmmoLa_intensity", "Lateralization", "CO2_threshold")
+
+# First, plot the data as a heatmap
+# Scale relevant columns
+trigeminal_measures_data_scaled <- trigeminal_measures_data %>%
+  mutate(
+    Lateralization = scale01minmax(Lateralization, minX = 0, maxX = 20) * 100,
+    CO2_threshold = scale01minmax(CO2_threshold, minX = 0, maxX = 2000) * 100,
+    Segment = if_else(row_number() <= 549, "first_part", "second_part")
+  )
+
+heatmap_data <- trigeminal_measures_data_scaled %>%
+  mutate(Row = row_number()) %>%
+  pivot_longer(
+    cols = c(AmmoLa_intensity, Lateralization, CO2_threshold),
+    names_to = "Measure",
+    values_to = "Value"
+  )
+
+# Plot (horizontal heatmap)
+# Custom theme for ggplot2
+theme_plot <- function() {
+  theme_minimal(base_family = "Libre Franklin") +  # Replace font if installed
+    theme(
+      # Text elements
+      plot.title = element_text(face = "plain", size = 18, color = "#222222", hjust = 0, margin = margin(b = 10)),
+      axis.title = element_text(face = "plain", size = 12, color = "#444444"),
+      axis.text = element_text(face = "plain", size = 10, color = "#444444"),
+      plot.caption = element_text(size = 8, color = "#888888", hjust = 0, margin = margin(t = 10)),
+
+      # Grid lines
+      panel.grid.major.y = element_line(color = "#dddddd", linetype = "dashed", size = 0.3),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor = element_blank(),
+
+      # Axis lines and ticks
+      axis.line = element_line(color = "#bbbbbb", size = 0.5),
+      axis.ticks = element_line(color = "#bbbbbb", size = 0.5),
+      axis.ticks.length = unit(5, "pt"),
+
+      # Plot background
+      plot.background = element_rect(fill = "white", color = NA),
+      panel.background = element_rect(fill = "white", color = NA),
+
+      # Legend
+      legend.position = "right",
+      legend.direction = "vertical",
+
+      # Margins and spacing for breathing room
+      plot.margin = margin(20, 20, 20, 20),
+
+      # Facet tweaks if needed
+      strip.background = element_blank(),
+      strip.text = element_text(face = "bold", size = 12, color = "#222222")
+    )
+}
+
+# Plot
+p_trigeminal_measures_done <- ggplot(heatmap_data, aes(x = Row, y = Measure, fill = Value)) +
+  geom_tile() +
+  scale_fill_viridis_c(option = "plasma", na.value = "grey90", name = "Value") +
+  theme_plot() +
+  labs(
+    x = "Observation (Row)",
+    y = "Measure",
+    title = "Trigeminal measures",
+    fill = "Value [%]"
+  ) +
+  geom_vline(xintercept = 549.5, linetype = "dashed", color = "black", linewidth = 1) +
+  annotate("text", x = 275, y = 0.5,
+           label = "Before holding breath during CO2 threshold measurement",
+           vjust = -1, size = 5, color = "black") +
+  annotate("text", x = 775, y = 0.5,
+           label = "After holding breath during CO2 threshold measurement",
+           vjust = -1, size = 5, color = "black")
+
+p_trigeminal_measures_done
+
+ggsave(paste0("p_trigeminal_measures_done", ".svg"), p_trigeminal_measures_done, width = 16, height = 4)
 
 # Check how many data is censored
 max_vals <- c(100, 20, 2000)
@@ -92,7 +169,6 @@ if (scale_0_100) {
 }
 
 # Optionally: Replace all censored data with NA
-
 if (remove_censored) {
   for (i in seq_along(max_vals)) {
     trigeminal_measures_data[[i]][trigeminal_measures_data[[i]] == max_vals[i]] <- NA
@@ -100,13 +176,20 @@ if (remove_censored) {
 }
 
 # Save raw trigeminal measures data as CSV for record keeping
-write.csv(trigeminal_measures_data, "trigeminal_measures_data.csv")
+if (scale_0_100) {
+  write.csv(trigeminal_measures_data, "trigeminal_measures_scaled_0_100_data.csv")
+} else {
+  write.csv(trigeminal_measures_data, "trigeminal_measures_data.csv")
+}
 
 # ----------------------------
 # Define transformation functions
 reflect_log <- function(x) slog(max(x, na.rm = TRUE) + 1 - x)
+
 reflect_log_unflipped <- function(x) - slog(max(x, na.rm = TRUE) + 1 - x)
+
 square <- function(x) x ^ 2
+
 log_transform <- function(x) slog(x)
 
 # Apply transformations and add new columns
@@ -117,7 +200,6 @@ trigeminal_measures_data <- trigeminal_measures_data %>%
     CO2_threshold_slog = log_transform(CO2_threshold)
   )
 
-
 # Check which one correlates with age
 trigeminal_measures_data_age <- trigeminal_measures_data
 trigeminal_measures_data_age$age <- as.numeric(trigeminale_daten_table1$Alter)
@@ -126,7 +208,11 @@ corr_mat_age <- cor(trigeminal_measures_data_age, use = "pairwise.complete.obs",
 # Check which one is sex different
 trigeminal_measures_data_sex <- trigeminal_measures_data
 trigeminal_measures_data_sex$sex <- as.factor(trigeminale_daten_table1$Geschlecht)
-sex_diff_trig <- apply(trigeminal_measures_data_sex[, 1:(ncol(trigeminal_measures_data_sex) - 1)], 2, function(x) kruskal.test(x ~ as.factor(trigeminal_measures_data_sex$sex)))
+
+sex_diff_trig <- apply(
+  trigeminal_measures_data_sex[, 1:(ncol(trigeminal_measures_data_sex) - 1)], 2,
+  function(x) kruskal.test(x ~ as.factor(trigeminal_measures_data_sex$sex))
+)
 
 variables <- colnames(trigeminal_measures_data_sex)[colnames(trigeminal_measures_data_sex) != "sex"]
 
@@ -157,7 +243,6 @@ sex_stats_df <- bind_rows(sex_stats) %>%
   arrange(desc(eta2))
 
 print(sex_stats_df)
-
 
 # ----------------------------
 # Plot distributions of non-CO2 related trigeminal measures
@@ -237,7 +322,9 @@ ggsave(paste0("p_distribution_tigeminal_CO2", ".svg"), p_distribution_tigeminal_
 # ----------------------------
 # Analyse and plot correlations as matrix
 # ------------ DATA PREP -----------------
-trigeminal_measures_data_transformed <- trigeminal_measures_data[, c("AmmoLa_intensity_reflect_slog", "Lateralization_square", "CO2_threshold_slog")]
+trigeminal_measures_data_transformed <- trigeminal_measures_data[,
+                                                                 c("AmmoLa_intensity_reflect_slog", "Lateralization_square", "CO2_threshold_slog")]
+
 trigeminal_measures_data_transformed <- trigeminal_measures_data_transformed %>%
   mutate(CO2_threshold_slog = ifelse(row_number() <= 549, NA, CO2_threshold_slog))
 
@@ -252,9 +339,8 @@ plot_list <- map(var_pairs, function(vars) {
   df$pair <- paste(vars, collapse = " vs ")
   df
 })
-plot_df <- bind_rows(plot_list)
 
-# ... previous data prep ...
+plot_df <- bind_rows(plot_list)
 
 # --- Compose safe plotmath expressions for annotation ---
 get_eq_label <- function(x, y) {
@@ -308,6 +394,7 @@ facet_tops <- plot_df %>%
   )
 
 label_df <- left_join(full_stats_df, facet_tops, by = "pair")
+
 p <- ggplot(plot_df, aes(x = x, y = y)) +
   geom_point(alpha = 0.6) +
   geom_smooth(
@@ -344,8 +431,8 @@ p <- ggplot(plot_df, aes(x = x, y = y)) +
     axis.title.y = element_text(size = 12),
     strip.background = element_blank()
   )
-print(p)
 
+print(p)
 
 # ----------------------------
 # Prepare data for correlation heatmap --------------------------------------
@@ -359,9 +446,13 @@ all_measurs_correlations <- trigeminal_measures_data %>%
 corr_mat <- cor(all_measurs_correlations, use = "pairwise.complete.obs", method = "pearson")
 
 # Define NYT-inspired color palette for correlation heatmap
-breaks <- c(-1, -0.9, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, -0.05, -0.02, -0.01, 0,
-            0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.9, 1)
+breaks <- c(
+  -1, -0.9, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, -0.05, -0.02, -0.01, 0,
+  0.01, 0.02, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.9, 1
+)
+
 nyt_colors <- c(
+  # reversed original color vector for negative values
   "ghostwhite",
   "#fbfbfb",
   "#e6f0fa",
@@ -371,13 +462,13 @@ nyt_colors <- c(
   "dodgerblue2",
   "#041a58"
 )
+
 nyt_colors <- c(
-  rev(nyt_colors), # reversed original color vector for negative values
-  nyt_colors # original color vector for positive values
+  rev(nyt_colors),
+  nyt_colors
 )
 
 color_vec <- colorRampPalette(nyt_colors)(length(breaks))
-
 col_fun <- colorRamp2(breaks, color_vec)
 
 # Function to set text color (dark on light backgrounds, white on dark)
@@ -390,52 +481,51 @@ text_color_fun <- function(fill_color) {
 # Create correlation heatmap with values and adaptive text color
 create_heatmap_trig <- function() {
   ht <- Heatmap(
-  corr_mat,
-  name = "Correlation",
-  col = col_fun,
-  na_col = "white",
-  cluster_rows = TRUE,
-  clustering_method_rows = "ward.D2",
-  show_row_dend = TRUE,
-  cluster_columns = TRUE,
-  clustering_method_columns = "ward.D2",
-  show_column_dend = FALSE,
-  row_dend_width = unit(4, "cm"),
-  column_dend_height = unit(4, "cm"),
-  cell_fun = function(j, i, x, y, width, height, fill) {
-    val <- sprintf("%.2f", corr_mat[i, j])
-    col_text <- text_color_fun(fill)
-    grid.text(val, x, y, gp = gpar(fontsize = 10, col = col_text))
-  },
-  rect_gp = gpar(col = NA),
-  border = FALSE,
-  row_names_side = "left",
-  column_names_side = "top",
-  heatmap_legend_param = list(
-    direction = "horizontal",
-    title_position = "topcenter",
-    title_gp = gpar(fontface = "bold"),
-    labels_gp = gpar(fontsize = 10)
-  ),
-  top_annotation = NULL,
-  show_heatmap_legend = TRUE
+    corr_mat,
+    name = "Correlation",
+    col = col_fun,
+    na_col = "white",
+    cluster_rows = TRUE,
+    clustering_method_rows = "ward.D2",
+    show_row_dend = TRUE,
+    cluster_columns = TRUE,
+    clustering_method_columns = "ward.D2",
+    show_column_dend = FALSE,
+    row_dend_width = unit(4, "cm"),
+    column_dend_height = unit(4, "cm"),
+    cell_fun = function(j, i, x, y, width, height, fill) {
+      val <- sprintf("%.2f", corr_mat[i, j])
+      col_text <- text_color_fun(fill)
+      grid.text(val, x, y, gp = gpar(fontsize = 10, col = col_text))
+    },
+    rect_gp = gpar(col = NA),
+    border = FALSE,
+    row_names_side = "left",
+    column_names_side = "top",
+    heatmap_legend_param = list(
+      direction = "horizontal",
+      title_position = "topcenter",
+      title_gp = gpar(fontface = "bold"),
+      labels_gp = gpar(fontsize = 10)
+    ),
+    top_annotation = NULL,
+    show_heatmap_legend = TRUE
   )
 
   # Render heatmap on a new page
   grid.newpage()
-
   draw(
-  ht,
-  heatmap_legend_side = "bottom"
+    ht,
+    heatmap_legend_side = "bottom"
   )
 
   # Add a bold, left-aligned title manually above heatmap
   grid.text(
-  "Correlation matrix",
-  x = unit(0, "npc") + unit(4, "mm"), # left margin
-  y = unit(1, "npc") - unit(4, "mm"), # top margin
-  just = c("left", "top"),
-  gp = gpar(fontsize = 16, fontface = "bold")
+    "Correlation matrix",
+    x = unit(0, "npc") + unit(4, "mm"),  # left margin
+    y = unit(1, "npc") - unit(4, "mm"),  # top margin
+    just = c("left", "top"),
+    gp = gpar(fontsize = 16, fontface = "bold")
   )
 }
 
@@ -451,4 +541,3 @@ grid.draw(gp)
 svg(paste0("trigeminal_correlation_heatmap", ".svg"), width = 8, height = 8)
 grid.draw(gp)
 dev.off()
-
