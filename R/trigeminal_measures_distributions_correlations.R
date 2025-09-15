@@ -122,7 +122,7 @@ theme_plot <- function() {
 # Plot
 p_trigeminal_measures_done <- ggplot(heatmap_data, aes(x = Row, y = Measure, fill = Value)) +
   geom_tile() +
-  scale_fill_viridis_c(option = "plasma", na.value = "grey90", name = "Value") +
+  scale_fill_viridis_c(option = "plasma", na.value = "grey90", name = "Value [%]") +
   theme_plot() +
   labs(
     x = "Observation (Row)",
@@ -132,10 +132,10 @@ p_trigeminal_measures_done <- ggplot(heatmap_data, aes(x = Row, y = Measure, fil
   ) +
   geom_vline(xintercept = 549.5, linetype = "dashed", color = "black", linewidth = 1) +
   annotate("text", x = 275, y = 0.5,
-           label = "Before holding breath during CO2 threshold measurement",
+           label = "Breath not hold during CO2 threshold measurement",
            vjust = -1, size = 5, color = "black") +
   annotate("text", x = 775, y = 0.5,
-           label = "After holding breath during CO2 threshold measurement",
+           label = "Breath hold during CO2 threshold measurement",
            vjust = -1, size = 5, color = "black")
 
 p_trigeminal_measures_done
