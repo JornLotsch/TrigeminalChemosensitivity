@@ -19,7 +19,7 @@ library(viridis)
 library(grid)
 
 # Switches
-remove_censored <- FALSE
+remove_censored <- TRUE
 scale_0_100 <- FALSE
 
 # ----------------------------
@@ -438,12 +438,60 @@ print(p)
 # Prepare data for correlation heatmap --------------------------------------
 
 # Mask CO2_threshold and transformed CO2_threshold for first 549 rows (set to NA)
-all_measurs_correlations <- trigeminal_measures_data %>%
-  mutate(CO2_threshold_slog = ifelse(row_number() <= 549, NA, CO2_threshold_slog)) %>%
-  mutate(CO2_threshold = ifelse(row_number() <= 549, NA, CO2_threshold))
+# all_measures_correlations <- trigeminal_measures_data %>%
+#   mutate(CO2_threshold_slog = ifelse(row_number() <= 549, NA, CO2_threshold_slog)) %>%
+#   mutate(CO2_threshold = ifelse(row_number() <= 549, NA, CO2_threshold))
+
+# Split groups, instead of masking
+all_measures_correlations <- trigeminal_measures_data
+
+# Fill new columns with NA, then assign only the correct rows
+all_measures_correlations$CO2_threshold_breath_not_hold <- NA_real_
+all_measures_correlations$CO2_threshold_breath_not_hold[1:549] <- all_measures_correlations$CO2_threshold[1:549]
+
+all_measures_correlations$CO2_threshold_breath_hold <- NA_real_
+all_measures_correlations$CO2_threshold_breath_hold[550:nrow(all_measures_correlations)] <- all_measures_correlations$CO2_threshold[550:nrow(all_measures_correlations)]
+
+all_measures_correlations$CO2_threshold_slog_breath_not_hold <- NA_real_
+all_measures_correlations$CO2_threshold_slog_breath_not_hold[1:549] <- all_measures_correlations$CO2_threshold_slog[1:549]
+
+all_measures_correlations$CO2_threshold_slog_breath_hold <- NA_real_
+all_measures_correlations$CO2_threshold_slog_breath_hold[550:nrow(all_measures_correlations)] <- all_measures_correlations$CO2_threshold_slog[550:nrow(all_measures_correlations)]
+
 
 # Calculate pairwise correlation matrix with pairwise complete observations
-corr_mat <- cor(all_measurs_correlations, use = "pairwise.complete.obs", method = "pearson")
+# corr_mat <- cor_stats(all_measures_correlations, use = "pairwise.complete.obs", method = "pearson")
+
+library(psych)
+
+# Select only numeric columns for correlation analysis
+numeric_data <- all_measures_correlations %>%
+  dplyr::select(where(is.numeric))
+
+# Calculate correlations, p-values, and sample sizes, handling missing data with pairwise deletion
+cor_method <- "spearman"
+cor_results <- corr.test(numeric_data, use = "pairwise", method = cor_method)
+
+# Extract correlation matrix
+corr_mat <- cor_results$r
+
+# Extract p-value matrix
+p_mat <- cor_results$p
+
+signif_code <- function(p) {
+  if (is.na(p)) {
+    ""
+  } else if (p < 0.001) {
+    "***"
+  } else if (p < 0.01) {
+    "**"
+  } else if (p < 0.05) {
+    "*"
+  } else {
+    ""
+  }
+}
+
 
 # Define NYT-inspired color palette for correlation heatmap
 breaks <- c(
@@ -495,8 +543,11 @@ create_heatmap_trig <- function() {
     column_dend_height = unit(4, "cm"),
     cell_fun = function(j, i, x, y, width, height, fill) {
       val <- sprintf("%.2f", corr_mat[i, j])
+      pval <- p_mat[i, j]
+      star <- signif_code(pval)
+      lbl <- paste0(val, star)
       col_text <- text_color_fun(fill)
-      grid.text(val, x, y, gp = gpar(fontsize = 10, col = col_text))
+      grid.text(lbl, x, y, gp = gpar(fontsize = 10, col = col_text))
     },
     rect_gp = gpar(col = NA),
     border = FALSE,
@@ -509,7 +560,10 @@ create_heatmap_trig <- function() {
       labels_gp = gpar(fontsize = 10)
     ),
     top_annotation = NULL,
-    show_heatmap_legend = TRUE
+    show_heatmap_legend = TRUE,
+    row_names_gp = gpar(fontsize = 8),
+    column_names_gp = gpar(fontsize = 8),
+
   )
 
   # Render heatmap on a new page
@@ -521,7 +575,7 @@ create_heatmap_trig <- function() {
 
   # Add a bold, left-aligned title manually above heatmap
   grid.text(
-    "Correlation matrix",
+    paste0("Correlation matrix (",cor_method,")"),
     x = unit(0, "npc") + unit(4, "mm"),  # left margin
     y = unit(1, "npc") - unit(4, "mm"),  # top margin
     just = c("left", "top"),
@@ -538,6 +592,6 @@ gp <- grid.grabExpr(create_heatmap_trig())
 grid.draw(gp)
 
 # Export the plot to an SVG file with specified dimensions
-svg(paste0("trigeminal_correlation_heatmap", ".svg"), width = 8, height = 8)
+svg(paste0("trigeminal_correlation_heatmap", ".svg"), width = 12, height = 12)
 grid.draw(gp)
 dev.off()
