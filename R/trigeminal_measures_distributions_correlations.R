@@ -21,6 +21,7 @@ library(grid)
 # Switches
 remove_censored <- TRUE
 scale_0_100 <- FALSE
+correlate_only_untransformed <- TRUE
 
 # ----------------------------
 # Define zero-invariant log transform function
@@ -125,18 +126,31 @@ p_trigeminal_measures_done <- ggplot(heatmap_data, aes(x = Row, y = Measure, fil
   scale_fill_viridis_c(option = "plasma", na.value = "grey90", name = "Value [%]") +
   theme_plot() +
   labs(
-    x = "Observation (Row)",
+    x = "Observation (Subject #)",
     y = "Measure",
     title = "Trigeminal measures",
     fill = "Value [%]"
   ) +
   geom_vline(xintercept = 549.5, linetype = "dashed", color = "black", linewidth = 1) +
-  annotate("text", x = 275, y = 0.5,
+  # Add semi-transparent background for the first annotation
+  annotate("rect",
+           xmin = 60, xmax = 480, ymin = 1.8, ymax = 2.2,
+           fill = "white", alpha = 0.7
+  ) +
+  annotate("text", x = 275, y = 2,
            label = "Breath not hold during CO2 threshold measurement",
-           vjust = -1, size = 5, color = "black") +
-  annotate("text", x = 775, y = 0.5,
+           size = 5, color = "black"
+  ) +
+  # Add semi-transparent background for the second annotation
+  annotate("rect",
+           xmin = 575, xmax = 970, ymin = 1.8, ymax = 2.2,
+           fill = "white", alpha = 0.7
+  ) +
+  annotate("text", x = 775, y = 2,
            label = "Breath hold during CO2 threshold measurement",
-           vjust = -1, size = 5, color = "black")
+           size = 5, color = "black"
+  )
+
 
 p_trigeminal_measures_done
 
@@ -181,6 +195,16 @@ if (scale_0_100) {
 } else {
   write.csv(trigeminal_measures_data, "trigeminal_measures_data.csv")
 }
+
+
+# Check how many cases remain in each trigeminal measure with breath hold
+# Check how many cases remain in each trigeminal measure with breath hold
+counts_non_NA <- apply(trigeminal_measures_data, 2, function(x) sum(!is.na(x)))
+counts_non_NA
+counts_valid <- apply(trigeminal_measures_data[549:nrow(trigeminal_measures_data),], 2, function(x) sum(!is.na(x)))
+counts_valid
+counts_non_NA - counts_valid
+
 
 # ----------------------------
 # Define transformation functions
@@ -458,6 +482,7 @@ all_measures_correlations$CO2_threshold_slog_breath_not_hold[1:549] <- all_measu
 all_measures_correlations$CO2_threshold_slog_breath_hold <- NA_real_
 all_measures_correlations$CO2_threshold_slog_breath_hold[550:nrow(all_measures_correlations)] <- all_measures_correlations$CO2_threshold_slog[550:nrow(all_measures_correlations)]
 
+if (correlate_only_untransformed) all_measures_correlations <- all_measures_correlations[,-c(grep("slog|square", names(all_measures_correlations)))]
 
 # Calculate pairwise correlation matrix with pairwise complete observations
 # corr_mat <- cor_stats(all_measures_correlations, use = "pairwise.complete.obs", method = "pearson")
