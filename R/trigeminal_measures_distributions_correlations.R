@@ -17,9 +17,11 @@ library(stringr)
 library(tidyr)
 library(viridis)
 library(grid)
+library(vcd)
+library(cvms)
 
 # Switches
-remove_censored <- TRUE
+remove_censored <- FALSE
 scale_0_100 <- FALSE
 correlate_only_untransformed <- TRUE
 
@@ -70,7 +72,7 @@ names(trigeminal_measures_data) <- c("AmmoLa_intensity", "Lateralization", "CO2_
 trigeminal_measures_data_scaled <- trigeminal_measures_data %>%
   mutate(
     Lateralization = scale01minmax(Lateralization, minX = 0, maxX = 20) * 100,
-    CO2_threshold = scale01minmax(CO2_threshold, minX = 0, maxX = 2000) * 100,
+    CO2_threshold = scale01minmax(CO2_threshold, minX = 100, maxX = 2000) * 100,
     Segment = if_else(row_number() <= 549, "first_part", "second_part")
   )
 
@@ -175,6 +177,90 @@ counts2 <- apply(subset2, 2, function(x) sum(!is.na(x)))
 censored2 <- sapply(seq_along(max_vals), function(i) sum(subset2[[i]] == max_vals[i], na.rm = TRUE))
 percentage_censored2 <- (censored2 / counts2) * 100
 print(percentage_censored2)
+
+# Check whether groups with highest sensitivity agree
+
+trigeminal_measures_data_scaled[,1:2] <- apply(trigeminal_measures_data_scaled[,1:2],2,function(x) ifelse(x>=90,1,0))
+trigeminal_measures_data_scaled$CO2_threshold <- ifelse(trigeminal_measures_data_scaled$CO2_threshold<=10,1,0)
+apply(trigeminal_measures_data_scaled[,1:3],2,table)
+trigeminal_measures_data_scaled1 <- trigeminal_measures_data_scaled
+fisher.test(trigeminal_measures_data_scaled$AmmoLa_intensity, trigeminal_measures_data_scaled$Lateralization)
+fisher.test(trigeminal_measures_data_scaled$AmmoLa_intensity, trigeminal_measures_data_scaled$CO2_threshold)
+trigeminal_measures_data_scaled <- trigeminal_measures_data_scaled[549:nrow(trigeminal_measures_data),]
+fisher.test(trigeminal_measures_data_scaled$AmmoLa_intensity, trigeminal_measures_data_scaled$Lateralization)
+fisher.test(trigeminal_measures_data_scaled$AmmoLa_intensity, trigeminal_measures_data_scaled$CO2_threshold)
+table2 <- table(trigeminal_measures_data_scaled[,c(1,3)])
+
+
+# Plot confusion matrix for the CO2 measures with breath hold
+df_cm_cvms <- cbind.data.frame(
+  AmmoLa = trigeminal_measures_data_scaled$AmmoLa_intensity,
+  CO2 = trigeminal_measures_data_scaled$CO2_threshold
+)
+df_cm_cvms <- df_cm_cvms[complete.cases(df_cm_cvms),]
+
+# Create confusion matrix (target = CO2, predictions = AmmoLa)
+cm <- confusion_matrix(targets = df_cm_cvms$CO2,
+                       predictions = df_cm_cvms$AmmoLa)
+
+# Extract metrics from cm
+cm_stats <- cm[1, c("Balanced Accuracy", "F1", "Sensitivity", "Specificity",
+                    "Pos Pred Value", "Neg Pred Value", "Kappa", "MCC", "Detection Rate")]
+
+# Convert to named numeric vector
+vec <- unlist(cm_stats)
+
+# Format as "Name: value"
+formatted <- paste(names(vec), signif(vec, 3), sep = ": ")
+
+# Calculate midpoint to split metrics in two lines
+midpoint <- ceiling(length(formatted) / 2)
+
+# Create multiline string with \n between halves
+stat_string <- paste(
+  paste(formatted[1:midpoint], collapse = " | "),
+  paste(formatted[(midpoint + 1):length(formatted)], collapse = " | "),
+  sep = "\n"
+)
+
+# Perform Fisher's exact test on your contingency table
+tbl <- table(df_cm_cvms$AmmoLa, df_cm_cvms$CO2)
+fisher_result <- fisher.test(tbl)
+fisher_p <- signif(fisher_result$p.value, 3)
+
+# Plot confusion matrix with stats and fisher test p-value
+p_cm_AmmoLa_vs_CO2 <- plot_confusion_matrix(cm$`Confusion Matrix`[[1]], add_sums = FALSE) +
+  ggplot2::labs(
+    subtitle = stat_string,
+    caption = paste("Fisher's exact test p-value:", fisher_p)
+  ) +
+  ggplot2::xlab("Predictions: AmmoLa") +        # Rename x axis label here
+  ggplot2::ylab("Target: CO2")                   # Rename y axis label here
+
+print(p_cm_AmmoLa_vs_CO2)
+
+# Save plot
+ggsave(paste0("p_cm_AmmoLa_vs_CO2", ".svg"), p_cm_AmmoLa_vs_CO2, width = 8, height = 8)
+
+
+# Check whether AmmoLa can be somehow estimated from the other measures
+# library(partykit)
+# library(rpart)
+# library(Boruta)
+#
+# ctree_ammola <- ctree(AmmoLa_intensity ~. , data = trigeminal_measures_data, control = ctree_control(testtype="Univariate", alpha = 0.5))
+# plot(ctree_ammola)
+# df_ctree_factor <- cbind.data.frame(ammola_01 = trigeminal_measures_data_scaled1$AmmoLa_intensity, trigeminal_measures_data[,2:3])
+# ctree_ammola2 <- ctree(ammola_01 ~., data = df_ctree_factor, control = ctree_control(testtype="Univariate", alpha = 0.5, minbucket = 50))
+# plot(ctree_ammola2)
+# rpart_ammola <- rpart::rpart(AmmoLa_intensity ~. , data = trigeminal_measures_data, control = rpart.control(cp = 1))
+# rpart.plot::rpart.plot(rpart_ammola)
+# boruta_ammola <- Boruta::Boruta(AmmoLa_intensity ~. , data = trigeminal_measures_data )
+# plot(boruta_ammola)
+# boruta_ammola2 <- Boruta::Boruta(x = trigeminal_measures_data[,2:3], y = as.factor(trigeminal_measures_data_scaled1$AmmoLa_intensity ))
+# plot(boruta_ammola2)
+
+#### Continue with analyses
 
 # Optionally scale all variables 0 - 100
 if (scale_0_100) {
@@ -349,8 +435,14 @@ ggsave(paste0("p_distribution_tigeminal_CO2", ".svg"), p_distribution_tigeminal_
 trigeminal_measures_data_transformed <- trigeminal_measures_data[,
                                                                  c("AmmoLa_intensity_reflect_slog", "Lateralization_square", "CO2_threshold_slog")]
 
+# Reverse CO2 to fit high/low sensitivity
+trigeminal_measures_data_transformed$CO2_threshold_slog <- -trigeminal_measures_data_transformed$CO2_threshold_slog
+
+# Replace all CO2 thresholds aquired without hold breath with NA
+
 trigeminal_measures_data_transformed <- trigeminal_measures_data_transformed %>%
   mutate(CO2_threshold_slog = ifelse(row_number() <= 549, NA, CO2_threshold_slog))
+
 
 var_pairs <- list(
   c("AmmoLa_intensity_reflect_slog", "Lateralization_square"),
@@ -466,9 +558,14 @@ print(p)
 #   mutate(CO2_threshold_slog = ifelse(row_number() <= 549, NA, CO2_threshold_slog)) %>%
 #   mutate(CO2_threshold = ifelse(row_number() <= 549, NA, CO2_threshold))
 
-# Split groups, instead of masking
 all_measures_correlations <- trigeminal_measures_data
 
+# Reverse CO2 to fit high/low sensitivity
+
+all_measures_correlations$CO2_threshold <- -all_measures_correlations$CO2_threshold
+all_measures_correlations$CO2_threshold_slog <- -all_measures_correlations$CO2_threshold_slog
+
+# Split groups, instead of masking
 # Fill new columns with NA, then assign only the correct rows
 all_measures_correlations$CO2_threshold_breath_not_hold <- NA_real_
 all_measures_correlations$CO2_threshold_breath_not_hold[1:549] <- all_measures_correlations$CO2_threshold[1:549]

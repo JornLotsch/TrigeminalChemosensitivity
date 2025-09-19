@@ -21,6 +21,7 @@ This project analyzes medical data related to trigeminal sensitivity, focusing o
 │   ├── 📄 ENT_surgery_overview.R               # ENT surgical history analysis
 │   ├── 📄 facial_pain_overview.R               # Facial pain pattern analysis
 │   ├── 📄 chronic_diseases_overview.R          # Chronic disease analysis
+│   ├── 📄 nasal_breathing_overview.R           # Nasal breathing problems analysis
 │   ├── 📄 covid_overview.R                     # COVID-19 impact analysis
 │   ├── 📄 trigeminal_measures_distributions_correlations.R   # Distribution and correlation analysis of trigeminal measures
 │   └── 📄 ammo_distribution_analysis.R         # Statistical distribution analysis
@@ -79,12 +80,31 @@ This project analyzes medical data related to trigeminal sensitivity, focusing o
 
 ### R Dependencies
 ```r
-library(readxl)       # Excel file reading
-library(dplyr)        # Data manipulation
-library(stringr)      # String processing
-library(tidyr)        # Data tidying
-library(ggplot2)      # Data visualization
-library(opGMMassessment) # Gaussian Mixture Models
+# Data importing and wrangling
+library(readxl)        # Read Excel files (.xls and .xlsx)
+library(dplyr)         # Data manipulation (filter, mutate, summarise, select, etc.)
+library(tidyr)         # Data tidying (pivot, unnest, etc.)
+library(stringr)       # String processing (regex, pattern matching, etc.)
+library(forcats)       # Manipulating factor levels
+library(purrr)         # Functional programming (map, walk, etc.)
+library(lubridate)     # Date and time manipulation
+
+# Data visualization
+library(ggplot2)       # Grammar of graphics for data visualization
+library(scales)        # Axis labeling and scaling utilities for ggplot2
+library(ggtext)        # Rich text formatting for ggplot2 axis and titles
+library(viridis)       # Color palettes for publication-ready plots
+
+# Advanced analysis (only if used in your scripts; include/exclude as needed)
+library(MASS)              # Robust regression and statistical modeling
+library(ComplexHeatmap)    # Advanced heatmap visualization
+library(circlize)          # Circular visualizations
+library(ggthemes)          # Extra themes for ggplot2
+library(grid)              # Grid graphics for layout/customization
+library(vcd)               # Categorical data visualization
+library(cvms)              # Cross-validation tools for model selection
+library(reshape2)          # Legacy data reshaping (use tidyr where possible)
+library(opGMMassessment)   # Gaussian Mixture Model assessment and analysis
 ```
 
 ## Data Source
