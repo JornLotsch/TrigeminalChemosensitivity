@@ -1,4 +1,4 @@
-# Trigeminal sensitivity and modulation in humans from a general population sample
+# Trigeminal sensitivity and its modulation in a general population sample
 
 A research project analyzing trigeminal sensitivity and related factors using machine learning, statistical analysis and data visualization in R.
 
