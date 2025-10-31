@@ -318,13 +318,10 @@ if (order_plot) {
 
 # Create colored labels: red for neurological disorders, black otherwise
 label_colors <- ifelse(desc_levels %in% neurological_disorders, "red", "black")
-colored_labels <- paste0("<span style='color:", label_colors, "'>", desc_levels, "</span>")
-names(colored_labels) <- desc_levels
 
 # Add column to long_df indicating neurological disorder
 long_df <- long_df %>%
   mutate(is_neurological = desc_english %in% neurological_disorders)
-
 
 # Seed for reproducible jitter position
 set.seed(42)
@@ -341,8 +338,8 @@ p_chronic_disseases <- ggplot() +
   geom_text(data = count_df,
             aes(x = xpos, y = ypos, label = count),
             vjust = 0, size = 3, angle = 90) +
-  scale_x_discrete(drop = FALSE, labels = colored_labels) + # from previous step for colored x labels
-scale_color_manual(values = c("TRUE" = "red", "FALSE" = "black"),
+  scale_x_discrete(drop = FALSE) +
+  scale_color_manual(values = c("TRUE" = "red", "FALSE" = "black"),
                      labels = c("TRUE" = "Neurological", "FALSE" = "Other"),
                      name = "Disease Type") +
   scale_y_continuous(
@@ -352,14 +349,13 @@ scale_color_manual(values = c("TRUE" = "red", "FALSE" = "black"),
   labs(x = "Disease", y = "Year", title = "Diagnoses of chronic diseases over years") +
   theme_minimal(base_size = 8) +
   theme(
-    axis.text.x = element_markdown(angle = 90, hjust = 1, vjust = 0.5),
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5,
+                               color = label_colors),
     panel.grid.major.x = element_blank(),
     panel.grid.minor.x = element_blank(),
     panel.grid.major.y = element_line(color = "black", size = 0.3, linetype = "dashed")
   ) +
   geom_hline(yintercept = seq(min_year, max(long_df$year_plot, na.rm = TRUE)),
              color = "grey80", size = 0.3, linetype = "dashed")
-
-p_chronic_disseases
 
 ggsave(paste0("p_chronic_disseases", ".svg"), p_chronic_disseases, width = 12, height = 12)

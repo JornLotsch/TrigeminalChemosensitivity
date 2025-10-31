@@ -1,6 +1,6 @@
-# Trigeminal Sensitivity Research Project
+# Trigeminal sensitivity and modulation in humans from a general population sample
 
-A comprehensive research project analyzing trigeminal sensitivity and related factors using statistical analysis and data visualization in R.
+A research project analyzing trigeminal sensitivity and related factors using machine learning, statistical analysis and data visualization in R.
 
 ## Project Overview
 

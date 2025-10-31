@@ -176,7 +176,9 @@ trigeminal_measures_data_scaled1 <- trigeminal_measures_data_scaled
 
 # Fisher's exact tests
 fisher.test(trigeminal_measures_data_scaled$AmmoLa_intensity, trigeminal_measures_data_scaled$Lateralization)
+table(trigeminal_measures_data_scaled$AmmoLa_intensity, trigeminal_measures_data_scaled$Lateralization)
 fisher.test(trigeminal_measures_data_scaled$AmmoLa_intensity, trigeminal_measures_data_scaled$CO2_threshold)
+table(trigeminal_measures_data_scaled$AmmoLa_intensity, trigeminal_measures_data_scaled$CO2_threshold)
 
 ## Analyze only rows with breath hold
 trigeminal_measures_data_scaled <- trigeminal_measures_data_scaled[549:nrow(trigeminal_measures_data),]
@@ -204,7 +206,8 @@ tbl <- table(df_cm_cvms$AmmoLa, df_cm_cvms$CO2)
 fisher_result <- fisher.test(tbl)
 fisher_p <- signif(fisher_result$p.value, 3)
 
-p_cm_AmmoLa_vs_CO2 <- plot_confusion_matrix(cm$`Confusion Matrix`[[1]], add_sums = FALSE) +
+p_cm_AmmoLa_vs_CO2 <-
+  plot_confusion_matrix(cm$`Confusion Matrix`[[1]], add_sums = FALSE, intensity_by = "counts") +
   ggplot2::labs(
     subtitle = stat_string,
     caption = paste("Fisher's exact test p-value:", fisher_p)
