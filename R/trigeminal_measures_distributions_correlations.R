@@ -79,6 +79,7 @@ trigeminale_daten_table1 <- read_excel(
 trigeminal_measures_vars <- c("R28", "Lateralisierung (x/20)", "CO2-Schwelle")
 trigeminal_measures_data <- trigeminale_daten_table1[, trigeminal_measures_vars]
 names(trigeminal_measures_data) <- c("AmmoLa_intensity", "Lateralization", "CO2_threshold")
+apply(trigeminal_measures_data,2,function(x) sum(!is.na(x)))
 
 # ============================= #
 # 5. Initial Data Visualization

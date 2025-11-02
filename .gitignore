@@ -3,6 +3,7 @@
 .RData
 .Ruserdata
 read_and_explore_data.R
+read_and_explore_data_OLD.R
 *.svg
 *.Rproj
 .idea
