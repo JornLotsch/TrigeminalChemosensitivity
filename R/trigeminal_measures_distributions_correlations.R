@@ -275,7 +275,9 @@ cat("\nOverall censoring:\n")
 print(percentage_censored)
 
 # Censoring in first subset (rows 1-549, breath not controlled)
-subset1 <- trigeminal_measures_data[1:549, ]
+subset1 <- trigeminal_measures_data
+subset1$CO2_threshold[550:nrow(subset1)] <- NA
+subset1$CO2_threshold_slog[550:nrow(subset1)] <- NA
 counts1 <- apply(subset1, 2, function(x) sum(!is.na(x)))
 censored1 <- sapply(
   seq_along(max_vals),
@@ -286,7 +288,9 @@ cat("\nCensoring in subset 1 (breath not controlled):\n")
 print(percentage_censored1)
 
 # Censoring in second subset (rows 549+, breath hold protocol)
-subset2 <- trigeminal_measures_data[549:nrow(trigeminal_measures_data), ]
+subset2 <- trigeminal_measures_data
+subset2$CO2_threshold[1:549] <- NA
+subset2$CO2_threshold_slog[1:549] <- NA
 counts2 <- apply(subset2, 2, function(x) sum(!is.na(x)))
 censored2 <- sapply(
   seq_along(max_vals),
@@ -826,6 +830,8 @@ numeric_data <- all_measures_correlations %>%
 # Calculate Spearman correlations with p-values
 cor_method <- "spearman"
 cor_results <- corr.test(numeric_data, use = "pairwise", method = cor_method)
+print(cor_results)
+
 corr_mat <- cor_results$r  # Correlation coefficients
 p_mat <- cor_results$p      # P-values
 
@@ -957,9 +963,9 @@ cat("\nCreating combined publication figure...\n")
 combined_trigeminal_analysis_plot <- cowplot::plot_grid(
   # Top row: Distribution plots (A, B, C)
   cowplot::plot_grid(
+    pPDE_CO2,
     pPDE_AmmoLA,
     pPDE_Lateralization,
-    pPDE_CO2,
     labels = LETTERS[1:3],
     nrow = 1,
     align = "h",
@@ -969,24 +975,24 @@ combined_trigeminal_analysis_plot <- cowplot::plot_grid(
   # Bottom row: Agreement tables (D, E) and correlation matrix (F)
   cowplot::plot_grid(
     cowplot::plot_grid(
-      p_table_AmmoLa_vs_CO2_most_sensitive,
-      p_table_AmmoLa_vs_lateralization_most_sensitive,
-      labels = LETTERS[4:5],
+      corr_plot,
+      labels = LETTERS[4],
       nrow = 1,
       align = "h",
       axis = "tb",
-    label_y = 0.97
+      label_y = 0.97
     ),
     cowplot::plot_grid(
-      corr_plot,
-      labels = LETTERS[6],
+      p_table_AmmoLa_vs_CO2_most_sensitive,
+      p_table_AmmoLa_vs_lateralization_most_sensitive,
+      labels = LETTERS[5:6],
       nrow = 1,
       align = "h",
       axis = "tb",
       label_y = 0.97
     ),
     nrow = 1,
-    rel_widths = c(2, 1),
+    rel_widths = c(1, 2),
     align = "h",
     axis = "tb"
   ),

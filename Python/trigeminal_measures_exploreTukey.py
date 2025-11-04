@@ -47,7 +47,7 @@ for variable in TrigeminalVariableNames:
         # All cases for other variables
         figure = explore_tukey_lop(data=data_subset)
         
-# Example code for file saving
+# File saving
 # figure = explore_tukey_lop(data_subset, save_fig=True)  # Save to default name
 # figure = explore_tukey_lop(data_subset, save_fig=False)  # Do not save
 # figure = explore_tukey_lop(data_subset, save_fig=True, fig_path="custom_name.svg")  # Save to custom file
