@@ -171,8 +171,8 @@ translation_map <- c(
   "Pollinosis" = "Allergic rhinitis (hay fever)",
   "Heuschnupfen" = "Hay fever",
   "Heufieber" = "Hay fever",
-  "Allergien" = "Allergies",
-  "Allergie" = "Allergy",
+  "Allergien" = "All allergies",
+  "Allergie" = "All allergies",
   "Allergie Hausstaub" = "House dust allergy",
   "Hausstauballergie" = "House dust allergy",
   "Hausstaubmilbenallergie" = "House dust mite allergy",
@@ -296,6 +296,36 @@ count_df <- long_df %>%
   ungroup() %>%
   mutate(xpos = as.numeric(desc_english),
          ypos = max(long_df$year_plot, na.rm = TRUE) + 3)
+
+# Correct for allergy counts
+count_df$count[count_df$desc_english == "All allergies"] <- sum(na.omit(trigeminale_daten_table1$`Allergische Probleme` == "j"))
+
+# Add missing allergy entries to long_df for proper jittering
+allergies_count_in_long_df <- sum(long_df$desc_english == "All allergies", na.rm = TRUE)
+corrected_allergies_count <- sum(na.omit(trigeminale_daten_table1$`Allergische Probleme` == "j"))
+missing_allergies <- corrected_allergies_count - allergies_count_in_long_df
+
+if (missing_allergies > 0) {
+  # Create additional rows for missing allergy entries
+  additional_allergies <- data.frame(
+    rowid = NA,
+    set = NA,
+    year = NA,
+    desc = "Allergien",  # Use one of the German terms
+    desc_english = "All allergies",
+    year_plot = min_year - 2,  # Use the NA-year placeholder
+    is_neurological = FALSE
+  )
+
+  # Replicate the row for each missing entry
+  additional_allergies <- additional_allergies[rep(1, missing_allergies), ]
+
+  # Add to long_df
+  long_df <- bind_rows(long_df, additional_allergies)
+
+  # Re-factor to maintain proper levels
+  long_df$desc_english <- factor(long_df$desc_english, levels = desc_levels)
+}
 
 if (order_plot) {
   # Order by descending count

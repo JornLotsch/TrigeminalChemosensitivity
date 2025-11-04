@@ -167,11 +167,125 @@ category_vars <- split(variable_categories$Variable_german, variable_categories$
 desc_stats <- lapply(category_vars, function(vars) {
   existing_vars <- vars[vars %in% colnames(trigeminale_daten_table1)]
   if(length(existing_vars) > 0) {
-    describe(trigeminale_daten_table1[existing_vars], na.rm = TRUE)
+    # Separate yes/no variables from others
+    yes_no_vars <- c()
+    numeric_vars <- c()
+
+    for(var in existing_vars) {
+      var_data <- trigeminale_daten_table1[[var]]
+      unique_vals <- unique(na.omit(var_data))
+      # Check if variable contains only j/n values OR only 0/1 values (ignoring NA)
+      is_yes_no <- length(unique_vals) > 0 &&
+        (all(unique_vals %in% c("j", "n")) || all(unique_vals %in% c(0, 1)))
+
+      if(is_yes_no) {
+        yes_no_vars <- c(yes_no_vars, var)
+      } else {
+        numeric_vars <- c(numeric_vars, var)
+      }
+    }
+
+    # Get describe output for numeric variables
+    if(length(numeric_vars) > 0) {
+      desc_output <- describe(trigeminale_daten_table1[numeric_vars], na.rm = TRUE)
+    } else {
+      desc_output <- NULL
+    }
+
+    # Create describe-like output for yes/no variables
+    if(length(yes_no_vars) > 0) {
+      # First create the basic yes/no statistics
+      yes_no_stats <- data.frame(
+        n = sapply(yes_no_vars, function(v) sum(!is.na(trigeminale_daten_table1[[v]]))),
+        count_yes = sapply(yes_no_vars, function(v) {
+          var_data <- trigeminale_daten_table1[[v]]
+          unique_vals <- unique(na.omit(var_data))
+          # Count "j" for j/n variables, or 1 for 0/1 variables
+          if(all(unique_vals %in% c("j", "n"))) {
+            sum(var_data == "j", na.rm = TRUE)
+          } else {
+            sum(var_data == 1, na.rm = TRUE)
+          }
+        }),
+        row.names = yes_no_vars,
+        stringsAsFactors = FALSE
+      )
+
+      # If there's numeric output, match its structure
+      if(!is.null(desc_output)) {
+        # Get all column names from desc_output
+        all_cols <- names(desc_output)
+
+        # Create a complete data frame with all columns
+        yes_no_output <- as.data.frame(matrix(NA, nrow = nrow(yes_no_stats), ncol = length(all_cols)))
+        colnames(yes_no_output) <- all_cols
+        rownames(yes_no_output) <- rownames(yes_no_stats)
+
+        # Fill in the vars column (continuing numbering from numeric vars)
+        yes_no_output$vars <- seq_along(yes_no_vars) + max(desc_output$vars)
+
+        # Fill in the statistics we have
+        yes_no_output$n <- yes_no_stats$n
+        yes_no_output$max <- yes_no_stats$count_yes  # Count of "j" (or 1) in max column
+
+        # Combine both outputs
+        combined_output <- rbind(desc_output, yes_no_output)
+        combined_output
+      } else {
+        # If no numeric vars, just add vars column to yes_no_stats
+        yes_no_stats$vars <- seq_along(yes_no_vars)
+        yes_no_stats <- yes_no_stats[, c("vars", "n", "count_yes")]
+        yes_no_stats
+      }
+    } else {
+      desc_output
+    }
   } else {
     NULL
   }
 })
+
+# Add custom "Migraine yes" row to "Disorders or health complaints" category
+if("Disorders or health complaints" %in% names(desc_stats)) {
+  # Calculate migraine yes count
+  migraine_yes_count <- sum(na.omit(trigeminale_daten_table1$`Wie oft haben Sie im Monat Migräne?` > 0))
+  migraine_total_n <- sum(!is.na(trigeminale_daten_table1$`Wie oft haben Sie im Monat Migräne?`))
+
+  # Create new row for Migraine yes
+  migraine_row <- desc_stats$`Disorders or health complaints`[1, ]  # Copy structure
+  migraine_row[] <- NA  # Set all to NA
+  migraine_row$vars <- nrow(desc_stats$`Disorders or health complaints`) + 1
+  migraine_row$n <- migraine_total_n
+  migraine_row$max <- migraine_yes_count
+  rownames(migraine_row) <- "Migraine yes"
+
+  # Add to the data frame
+  desc_stats$`Disorders or health complaints` <- rbind(
+    desc_stats$`Disorders or health complaints`,
+    migraine_row
+  )
+}
+
+# Add custom "Alcohol yes" row to "Smoking and alcohol use" category
+if("Smoking and alcohol use" %in% names(desc_stats)) {
+  # Calculate alcohol yes count
+  alcohol_yes_count <- sum(na.omit(trigeminale_daten_table1$`Trinken Sie Alkohol?` > 0))
+  alcohol_total_n <- sum(!is.na(trigeminale_daten_table1$`Trinken Sie Alkohol?`))
+
+  # Create new row for Alcohol yes
+  alcohol_row <- desc_stats$`Smoking and alcohol use`[1, ]  # Copy structure
+  alcohol_row[] <- NA  # Set all to NA
+  alcohol_row$vars <- nrow(desc_stats$`Smoking and alcohol use`) + 1
+  alcohol_row$n <- alcohol_total_n
+  alcohol_row$max <- alcohol_yes_count
+  rownames(alcohol_row) <- "Alcohol yes"
+
+  # Add to the data frame
+  desc_stats$`Smoking and alcohol use` <- rbind(
+    desc_stats$`Smoking and alcohol use`,
+    alcohol_row
+  )
+}
 
 # Frequency tabulations
 tabulations <- lapply(category_vars, function(vars) {
@@ -197,6 +311,9 @@ tabulations$`Subjective nasal chemosensory perception`
 
 desc_stats$`Disorders or health complaints`
 tabulations$`Disorders or health complaints`
+
+desc_stats$`Smoking and alcohol use`
+tabulations$`Smoking and alcohol use`
 
 desc_stats$`COVID-19 history`
 tabulations$`COVID-19 history`
