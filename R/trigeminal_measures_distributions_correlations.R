@@ -289,15 +289,15 @@ print(percentage_censored1)
 
 # Censoring in second subset (rows 549+, breath hold protocol)
 subset2 <- trigeminal_measures_data
-subset2$CO2_threshold[1:549] <- NA
-subset2$CO2_threshold_slog[1:549] <- NA
+subset2$CO2_threshold[550:nrow(subset2)] <- NA
+subset2$CO2_threshold_slog[550:nrow(subset2)] <- NA
 counts2 <- apply(subset2, 2, function(x) sum(!is.na(x)))
 censored2 <- sapply(
   seq_along(max_vals),
   function(i) sum(subset2[[i]] == max_vals[i], na.rm = TRUE)
 )
-percentage_censored2 <- (censored2 / counts2) * 100
-cat("\nCensoring in subset 2 (breath hold):\n")
+percentage_censored2 <- (censored2 / counts2) * 200
+cat("\nCensoring in subset 2 (breath not controlled):\n")
 print(percentage_censored2)
 
 # ========================================================================== #
@@ -454,8 +454,8 @@ p_table_AmmoLa_vs_CO2_most_sensitive <- ggplot(
   aes(x = CO2_threshold, y = AmmoLa_intensity, fill = Freq)
 ) +
   geom_tile(color = "black") +
-  geom_text(aes(label = Freq), color = "white", size = 6) +
-  scale_fill_gradient(low = "#deebf7", high = "#08519c") +
+  geom_text(aes(label = Freq), color = "black", size = 6) +
+  scale_fill_gradient(low = "cornsilk1", high = "cornsilk4") +
   theme_minimal() +
   labs(
     title = "Agreement of most sensitive subjects across tests",
@@ -490,8 +490,8 @@ p_table_AmmoLa_vs_lateralization_most_sensitive <- ggplot(
   aes(x = Lateralization, y = AmmoLa_intensity, fill = Freq)
 ) +
   geom_tile(color = "black") +
-  geom_text(aes(label = Freq), color = "white", size = 6) +
-  scale_fill_gradient(low = "#deebf7", high = "#08519c") +
+  geom_text(aes(label = Freq), color = "black", size = 6) +
+  scale_fill_gradient(low = "cornsilk1", high = "cornsilk4") +
   theme_minimal() +
   labs(
     title = "Agreement of most sensitive subjects across tests",
@@ -622,9 +622,9 @@ p_distribution_tigeminal_nonCO2 <- ggplot(
 ) +
   geom_histogram(
     aes(y = after_stat(density)),
-    bins = 30, fill = "lightblue", color = "white", alpha = 0.7
+    bins = 30, fill = "cornsilk3", color = "white", alpha = 0.7
   ) +
-  geom_density(color = "darkblue", linewidth = 1) +
+  geom_density(color = "cornsilk4", linewidth = 1) +
   facet_wrap(~variable, scales = "free") +
   labs(
     title = "Distribution of non-CO2 related trigeminal measures",
@@ -675,9 +675,9 @@ p_distribution_tigeminal_CO2 <- ggplot(
 ) +
   geom_histogram(
     aes(y = after_stat(density)),
-    fill = "lightblue", color = "white", alpha = 0.7
+    fill = "cornsilk3", color = "white", alpha = 0.7
   ) +
-  geom_density(color = "darkblue", size = 1) +
+  geom_density(color = "cornsilk4", size = 1) +
   facet_wrap(subset_group * variable ~ ., scales = "free", ncol = 2) +
   labs(
     title = "Distribution of CO2-related trigeminal measures, split by procedure",
@@ -707,16 +707,16 @@ cat("\nGenerating Pareto Density Estimation plots...\n")
 # PDE plot for AmmoLa intensity
 pPDE_AmmoLA <- PDEplotGG(trigeminal_measures_data$AmmoLa_intensity) +
   theme_plot() +
-  labs(title = "Distribution of AmmoLa intensity estimates") +
+  labs(title = "Distribution of AmmoLa intensity estimates", x = "Value", y = "PDE") +
   guides(color = "none") +
-  scale_color_manual(values = "dodgerblue")
+  scale_color_manual(values = "cornsilk4")
 
 # PDE plot for Lateralization
 pPDE_Lateralization <- PDEplotGG(trigeminal_measures_data$Lateralization) +
   theme_plot() +
-  labs(title = "Distribution of the number of correct lateralizations") +
+  labs(title = "Distribution of the number of correct lateralizations", x = "Value", y = "PDE") +
   guides(color = "none") +
-  scale_color_manual(values = "dodgerblue")
+  scale_color_manual(values = "cornsilk4")
 
 # PDE plot for CO2 thresholds (split by breath protocol)
 CO2_threshold_breathing <- trigeminal_measures_data$CO2_threshold[1:549]
@@ -737,11 +737,12 @@ CO2_df_for_PDE <- data.frame(
 
 pPDE_CO2 <- PDEplotGG(CO2_df_for_PDE) +
   theme_plot() +
-  labs(title = "Distribution of CO2 thresholds", color = "Breath") +
+  labs(title = "Distribution of CO2 thresholds", color = "Breath", x = "Value", y = "PDE") +
   scale_color_manual(
-    values = c("grey33", "dodgerblue"),
+    values = c("grey83", "cornsilk4"),
     labels = c("uncontrolled", "hold")
-  )
+  ) +
+  theme(legend.position.inside = TRUE, legend.position = c(.2,.85))
 
 # ========================================================================== #
 # 13. CORRELATION MATRIX PREPARATION
@@ -854,8 +855,8 @@ breaks <- c(
 )
 
 nyt_colors <- c(
-  "ghostwhite", "#fbfbfb", "#e6f0fa", "#c9def9",
-  "#add0fa", "#7bb8fa", "dodgerblue2", "#041a58"
+  "ghostwhite", "#fbfbfb", "#f5f5dc", "#ede8d0",
+  "cornsilk", "cornsilk2", "cornsilk3", "cornsilk4"
 )
 nyt_colors <- c(rev(nyt_colors), nyt_colors)
 color_vec <- colorRampPalette(nyt_colors)(length(breaks))
@@ -1009,8 +1010,8 @@ print(combined_trigeminal_analysis_plot)
 ggsave(
   "combined_trigeminal_analysis_plot.svg",
   combined_trigeminal_analysis_plot,
-  width = 20,
-  height = 12
+  width = 15,
+  height = 9
 )
 
 # ========================================================================== #
