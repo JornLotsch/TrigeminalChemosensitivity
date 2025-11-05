@@ -375,7 +375,7 @@ if("Disorders or health complaints" %in% names(desc_stats)) {
 
   # Count "j" responses (including those mixed with years like "j 2015")
   # This checks if the string contains "j" (case-sensitive)
-  nasal_breathing_yes_count <- sum(grepl("^j", as.character(nasal_breathing_var), ignore.case = FALSE), na.rm = TRUE)
+  nasal_breathing_yes_count <- sum(!grepl("^n$", as.character(nasal_breathing_var), ignore.case = FALSE), na.rm = TRUE)
 
   # Total non-NA responses
   nasal_breathing_total_n <- sum(!is.na(nasal_breathing_var))
@@ -414,10 +414,12 @@ names(tabulations) <- names(category_vars)
 # Print descriptive stats and tabulations
 print(desc_stats$Demographics)
 # print(tabulations$Demographics)
+table(trigeminale_daten_table1$Geschlecht)
 
 # Print for Objective measurements as well
 print(desc_stats$`Objective measurements`)
 # print(tabulations$`Objective measurements`)
+table(trigeminale_daten_table1$`Identifikationstest (x/3)`)
 
 # Print subjective chemosensory trigeminal perception
 desc_stats$`Subjective nasal chemosensory perception`
@@ -432,8 +434,12 @@ disorders_summary <- data.frame(
   percentage = round(desc_stats$`Disorders or health complaints`$max /
                        desc_stats$`Disorders or health complaints`$n * 100, 2)
 )
-
 print(disorders_summary)
+sum(na.omit(!trigeminale_daten_table1$`Ärztliche Vorstellung wegen Problematik der Nasenatmung` == "n"))
+sum(na.omit(!trigeminale_daten_table1$`Ärztliche Vorstellung wegen Problematik der Nasenatmung` == "n")) /
+  length(na.omit(trigeminale_daten_table1$`Ärztliche Vorstellung wegen Problematik der Nasenatmung`)) * 100
+
+
 # tabulations$`Disorders or health complaints`
 
 # Print smoking and alcohol use
@@ -479,3 +485,16 @@ max(desc_stats$`Subjective nasal chemosensory perception`$n[
 added_migraine_questions <- c("How often do you have migraine per month?",  "Has migraine changed over the last 10 years?")
 max(desc_stats$`Disorders or health complaints`$n[
   rownames(desc_stats$`Disorders or health complaints`) %in% added_migraine_questions])
+
+
+# Plot odor identification distribution; functions from trigeminal_measures_distributions_correlations.R
+# PDE plot for AmmoLa intensity
+if (exists("PDEplotGG") && exists("theme_plot")) {
+pPDE_odor_identification <- PDEplotGG(trigeminale_daten_table1$`Identifikationstest (x/3)`) +
+  theme_plot() +
+  labs(title = "Distribution of odor identification scores", x = "Value", y = "PDE") +
+  guides(color = "none") +
+  scale_color_manual(values = "cornsilk4")
+
+print(PDE_odor_identification)
+}

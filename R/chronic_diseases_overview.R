@@ -110,8 +110,8 @@ translation_map <- c(
   "D.m." = "Diabetes mellitus (generic)",
   "D.m. Typ l" = "Diabetes mellitus type I",
   "D.m. Typ ll" = "Diabetes mellitus type II",
-  "Diabethes" = "Diabetes mellitus (generic, typo)",
-  "Diabethes mellitus" = "Diabetes mellitus (generic, typo)",
+  "Diabethes" = "Diabetes mellitus (generic)",
+  "Diabethes mellitus" = "Diabetes mellitus (generic)",
   "Diabethes mellitus Typ ll" = "Diabetes mellitus type II",
   "Diabethes nellitus Typ 2" = "Diabetes mellitus type II",
   "Diabethes Typ l" = "Diabetes mellitus type I",
@@ -389,3 +389,7 @@ p_chronic_disseases <- ggplot() +
              color = "grey80", size = 0.3, linetype = "dashed")
 
 ggsave(paste0("p_chronic_disseases", ".svg"), p_chronic_disseases, width = 12, height = 12)
+
+# Print list
+print(as.data.frame(count_df))
+
