@@ -258,13 +258,13 @@ no_year_xpos <- min_year - 2
 
 with_year_points <- plot_nasal_breathing %>%
   filter(!is.na(year_num)) %>%
-  select(case_id, year_num)
+  dplyr::select(case_id, year_num)
 
 without_year_points <- plot_nasal_breathing %>%
   filter(is.na(year_num) & actual_nasal_breathing_problem == 1) %>%
   distinct(case_id, .keep_all = TRUE) %>%
   mutate(year_num = no_year_xpos) %>%
-  select(case_id, year_num)
+  dplyr::select(case_id, year_num)
 
 all_points <- bind_rows(with_year_points, without_year_points)
 
@@ -300,7 +300,7 @@ print(nasal_breathing_plot)
 df_therapy_long <- nasal_breathing_df %>%
   filter(!is.na(therapy_english)) %>%
   mutate(case_id = row_number()) %>%
-  select(case_id, therapy_english, years_clean) %>%
+  dplyr::select(case_id, therapy_english, years_clean) %>%
   mutate(years_list = strsplit(as.character(years_clean), ",")) %>%
   unnest(years_list) %>%
   mutate(

@@ -22,7 +22,7 @@ library(psych)
 # =============================== #
 
 # Import study data from Excel
-openxlsx <- read_excel(
+trigeminale_daten_table1 <- read_excel(
   "/home/joern/Aktuell/TrigeminalSensitivity/09Originale/Bormann Trigeminale Studie Daten.xlsx",
   sheet = "Tabelle1")
 
@@ -238,7 +238,7 @@ desc_stats <- lapply(category_vars, function(vars) {
 
     # Get describe output for numeric variables
     if(length(numeric_vars) > 0) {
-      desc_output <- describe(trigeminale_daten_table1[numeric_vars], na.rm = TRUE)
+      desc_output <- psych::describe(trigeminale_daten_table1[numeric_vars], na.rm = TRUE)
       # Rename rows to English
       english_names <- german_to_english_map[rownames(desc_output)]
       # Replace NA translations with original German names

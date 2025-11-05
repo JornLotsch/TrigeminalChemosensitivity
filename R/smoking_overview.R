@@ -17,7 +17,7 @@ library(psych)
 # ========================================================================== #
 
 # Read data from Excel file
-trigeminale_daten_table1_fixed <- read_excel(
+trigeminale_daten_table1 <- read_excel(
   "/home/joern/Aktuell/TrigeminalSensitivity/09Originale/Bormann Trigeminale Studie Daten.xlsx",
   sheet = "Tabelle1"
 )
@@ -52,7 +52,7 @@ col_cigs_former <- "Wenn ja: Wie viele Zigaretten am Tag?5"
 # 2. FIX SWAPPED COLUMNS (cigarette count vs. year)
 # ========================================================================== #
 
-trigeminale_daten_table1_fixed <- trigeminale_daten_table1_fixed %>%
+trigeminale_daten_table1_fixed <- trigeminale_daten_table1 %>%
   mutate(
     # Check if columns are swapped
     cigs_is_year = suppressWarnings(as.numeric(.data[[col_cigs_current]])) > 1900,
@@ -64,7 +64,7 @@ trigeminale_daten_table1_fixed <- trigeminale_daten_table1_fixed %>%
     !!col_cigs_current := ifelse(swapped, .data[[col_since_current]], .data[[col_cigs_current]]),
     !!col_since_current := ifelse(swapped, temp, .data[[col_since_current]])
   ) %>%
-  select(-c(cigs_is_year, since_is_year, swapped, temp))
+  dplyr::select(-c(cigs_is_year, since_is_year, swapped, temp))
 
 # ========================================================================== #
 # 3. HELPER FUNCTIONS
@@ -269,7 +269,7 @@ current_plot <- current_smokers %>%
     period = 1,
     has_period = !is.na(smoking_since)
   ) %>%
-  select(rowid, bar_start, bar_end, mean_cigs, smoker_type, period, has_period)
+  dplyr::select(rowid, bar_start, bar_end, mean_cigs, smoker_type, period, has_period)
 
 # Prepare former smokers for plotting
 former_plot <- former_smokers %>%
@@ -278,7 +278,7 @@ former_plot <- former_smokers %>%
     bar_end = end,
     has_period = (start != fallback_year | end != fallback_year)
   ) %>%
-  select(rowid, bar_start, bar_end, mean_cigs, smoker_type, period, has_period)
+  dplyr::select(rowid, bar_start, bar_end, mean_cigs, smoker_type, period, has_period)
 
 # Combine all smokers
 all_smokers <- bind_rows(current_plot, former_plot)
@@ -385,11 +385,11 @@ cat("\n--- Cigarette Consumption Statistics ---\n")
 cat("\nCURRENT SMOKERS:\n")
 if (nrow(current_smokers) > 0) {
   current_cigs <- current_smokers %>%
-    select(min_cigs, max_cigs, mean_cigs) %>%
+    dplyr::select(min_cigs, max_cigs, mean_cigs) %>%
     filter(!is.na(mean_cigs))
 
   if (nrow(current_cigs) > 0) {
-    print(describe(current_cigs, na.rm = TRUE))
+    print(psych::describe(current_cigs, na.rm = TRUE))
   } else {
     cat("No cigarette consumption data available for current smokers.\n")
   }
@@ -402,11 +402,11 @@ all_cigs <- all_smokers %>%
   group_by(rowid, smoker_type) %>%
   slice(1) %>%  # Take one row per person
   ungroup() %>%
-  select(mean_cigs) %>%
+  dplyr::select(mean_cigs) %>%
   filter(!is.na(mean_cigs))
 
 if (nrow(all_cigs) > 0) {
-  print(describe(all_cigs, na.rm = TRUE))
+  print(psych::describe(all_cigs, na.rm = TRUE))
 } else {
   cat("No cigarette consumption data available.\n")
 }
@@ -418,15 +418,15 @@ cat("\n--- Smoking Period Length (Years) ---\n")
 period_lengths <- all_smokers %>%
   filter(bar_start != fallback_year | bar_end != fallback_year) %>%
   mutate(period_length = bar_end - bar_start) %>%
-  select(rowid, smoker_type, period_length, has_period)
+  dplyr::select(rowid, smoker_type, period_length, has_period)
 
 cat("\nCURRENT SMOKERS (period length):\n")
 current_periods <- period_lengths %>%
   filter(smoker_type == "current") %>%
-  select(period_length)
+  dplyr::select(period_length)
 
 if (nrow(current_periods) > 0) {
-  print(describe(current_periods, na.rm = TRUE))
+  print(psych::describe(current_periods, na.rm = TRUE))
 } else {
   cat("No period length data available for current smokers.\n")
 }
@@ -434,10 +434,10 @@ if (nrow(current_periods) > 0) {
 cat("\nFORMER SMOKERS (period length):\n")
 former_periods <- period_lengths %>%
   filter(smoker_type == "former") %>%
-  select(period_length)
+  dplyr::select(period_length)
 
 if (nrow(former_periods) > 0) {
-  print(describe(former_periods, na.rm = TRUE))
+  print(psych::describe(former_periods, na.rm = TRUE))
 } else {
   cat("No period length data available for former smokers.\n")
 }
@@ -445,8 +445,8 @@ if (nrow(former_periods) > 0) {
 cat("\nALL SMOKERS COMBINED (period length):\n")
 if (nrow(period_lengths) > 0) {
   all_periods <- period_lengths %>%
-    select(period_length)
-  print(describe(all_periods, na.rm = TRUE))
+    dplyr::select(period_length)
+  print(psych::describe(all_periods, na.rm = TRUE))
 } else {
   cat("No period length data available.\n")
 }

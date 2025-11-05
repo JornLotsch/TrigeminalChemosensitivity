@@ -281,5 +281,5 @@ df_times_in_past <- df_filtered %>%
     months_since_Zeitraum_3 = as.numeric(Sys.Date() - `Zeitraum 3`) / 30.44
   )
 
-describe(df_times_in_past)
+psych::describe(df_times_in_past)
 table(df_times_in_past$`Waren Sie bereits an Covid erkrankt?`)
