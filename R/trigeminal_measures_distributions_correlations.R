@@ -221,6 +221,7 @@ p_trigeminal_measures_done <- ggplot(
 ) +
   geom_tile() +
   scale_fill_viridis_c(option = "plasma", na.value = "grey90", name = "Value [%]") +
+  scale_fill_gradient(low = "cornsilk", high = "cornsilk4", na.value = "grey90", name = "Value [%]") +
   theme_plot() +
   labs(
     x = "Observation (Subject #)",

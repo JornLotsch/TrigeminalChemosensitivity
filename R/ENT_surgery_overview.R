@@ -1,29 +1,46 @@
-library(readxl)
-library(stringr)
-library(dplyr)
-library(tidyr)
+# ========================================================================== #
+# Load required packages -----------------------------------------------------
+# ========================================================================== #
 
-# Switches
-order_plot <- FALSE
+library(readxl)    # Excel file reading
+library(stringr)   # String manipulation utilities
+library(dplyr)     # Data manipulation verbs
+library(tidyr)     # Data tidying and reshaping
 
-# Functions
+
+# ========================================================================== #
+# Global switches -------------------------------------------------------------
+# ========================================================================== #
+
+order_plot <- FALSE  # Control ordering of plot elements (TRUE = order by frequency)
+
+
+# ========================================================================== #
+# Function: Parse procedure descriptions --------------------------------------
+# ---------------------------------------------------------------------------
+# Parses strings containing procedure descriptions with years,
+# splitting into year-description pairs and handling various date formats
+# ========================================================================== #
+
 parse_procedure_descriptions <- function(text_vec) {
+
   parse_one <- function(text) {
-    # Split by comma, trim spaces, remove "seit"
+    # Split by commas, trim spaces, and remove filler values
     items <- stringr::str_split(text, ",\\s*")[[1]]
     items <- items[items != ""]
     items <- stringr::str_trim(items)
-    items <- items[items != "n"] # also skip "n" here, if it denotes filler
+    items <- items[items != "n"]  # Skip filler "n"
 
+    # Helper function to extract year from string patterns
     extract_year <- function(s) {
       s <- stringr::str_trim(s)
       if (is.na(s) || s == "") return(NA_character_)
 
-      # Match normal 4-digit year at start
+      # Match 4-digit year at start of string
       y <- stringr::str_extract(s, "^\\d{4}")
       if (!is.na(y)) return(y)
 
-      # Match year after slash, e.g. /74 or /2021
+      # Match /YY or /YYYY patterns (convert 2-digit to 4-digit)
       y <- stringr::str_extract(s, "/(\\d{2,4})")
       if (!is.na(y)) {
         y <- sub("/", "", y)
@@ -34,7 +51,7 @@ parse_procedure_descriptions <- function(text_vec) {
         return(y)
       }
 
-      # Match MM/YY format e.g. 05/21 (take only year)
+      # Match MM/YY format - take only year part
       y <- stringr::str_extract(s, "\\d{2}/(\\d{2})")
       if (!is.na(y)) {
         yy <- sub("\\d{2}/", "", y)
@@ -43,7 +60,7 @@ parse_procedure_descriptions <- function(text_vec) {
         return(y)
       }
 
-      # Match 90er Jahre style - roughly map to mid 1990s
+      # Map "90er Jahre" to approximate mid-1990s
       if (stringr::str_detect(s, "90er Jahre")) return("1995")
 
       NA_character_
@@ -51,22 +68,23 @@ parse_procedure_descriptions <- function(text_vec) {
 
     years <- sapply(items, extract_year)
 
+    # Extract descriptions removing year patterns, split by '+'
     descs <- vector("list", length(items))
     for (i in seq_along(items)) {
       desc_raw <- items[i]
-      # Remove all matched year patterns from string
-      desc_raw <- stringr::str_remove(desc_raw, "^\\d{4}\\s*") # leading 4 digit YYYY
-      desc_raw <- stringr::str_remove(desc_raw, "/\\d{2,4}") # /YY or /YYYY
-      desc_raw <- stringr::str_remove(desc_raw, "\\d{2}/\\d{2}") # MM/YY
-      desc_raw <- stringr::str_remove(desc_raw, "\\s*\\d{4}$") # trailing YYYY
-      desc_raw <- stringr::str_remove(desc_raw, "90er Jahre") # remove this text after mapping
+
+      desc_raw <- stringr::str_remove(desc_raw, "^\\d{4}\\s*")    # Leading YYYY
+      desc_raw <- stringr::str_remove(desc_raw, "/\\d{2,4}")       # /YY or /YYYY
+      desc_raw <- stringr::str_remove(desc_raw, "\\d{2}/\\d{2}")   # MM/YY
+      desc_raw <- stringr::str_remove(desc_raw, "\\s*\\d{4}$")     # Trailing YYYY
+      desc_raw <- stringr::str_remove(desc_raw, "90er Jahre")      # Remove text after mapping
       desc_raw <- stringr::str_trim(desc_raw)
 
-      # Split multiple procs connected by '+'
       desc_parts <- stringr::str_trim(stringr::str_split(desc_raw, "\\s*\\+\\s*")[[1]])
       descs[[i]] <- desc_parts
     }
 
+    # Repeat years for multiple descriptions per item
     years_expanded <- unlist(mapply(function(y, d) rep(y, length(d)), years, descs, SIMPLIFY = FALSE))
     descs_expanded <- unlist(descs)
 
@@ -76,14 +94,23 @@ parse_procedure_descriptions <- function(text_vec) {
   parsed <- lapply(text_vec, parse_one)
   max_len <- max(sapply(parsed, length))
 
+  # Pad vectors and create data frame with pairs of year and description columns
   parsed_padded <- lapply(parsed, function(x) { length(x) <- max_len; x })
   df <- as.data.frame(do.call(rbind, parsed_padded), stringsAsFactors = FALSE)
 
   half <- max_len / 2
-  colnames(df) <- paste0(rep(c("year", "desc"), half), rep(seq_len(half), each = 2))
+  colnames(df) <- paste0(
+    rep(c("year", "desc"), half),
+    rep(seq_len(half), each = 2)
+  )
 
   df
 }
+
+
+# ========================================================================== #
+# Read data and initial processing -------------------------------------------
+# ========================================================================== #
 
 # Read Excel file with chronic disease data
 trigeminale_daten_table1 <- read_excel(
@@ -91,35 +118,65 @@ trigeminale_daten_table1 <- read_excel(
   sheet = "Tabelle1"
 )
 
+# Identify character variables
+character_vars <- names(trigeminale_daten_table1)[sapply(trigeminale_daten_table1, is.character)]
+print(character_vars)
 
-# Clean-up the OP columns before extracting information
-clean_text_vec <- ifelse(trigeminale_daten_table1$`OP im HNO-Bereich` %in% c("n", "", "NA", "NaN"), NA_character_,
-                         trigeminale_daten_table1$`OP im HNO-Bereich`)
+# Convert selected character variables to numeric
+character_to_numeric_vars <- c(
+  "Alter",
+  "Körpergröße",
+  "Riechvermögen unmittelbar nach Covid-19",
+  "Wie oft Covid-19?",
+  "Trinken Sie Alkohol?",
+  "Wenn ich einen frischen Minzkaugummi gekaut habe, habe ich das Gefühl besser Luft durch die Nase zu bekommen"
+)
+trigeminale_daten_table1[character_to_numeric_vars] <-
+  lapply(trigeminale_daten_table1[character_to_numeric_vars], as.numeric)
 
 
-# Split ENT surgery descriptions into year/desc pairs
+# ========================================================================== #
+# Clean and parse ENT surgery descriptions -----------------------------------
+# ========================================================================== #
+
+clean_text_vec <- ifelse(
+  trigeminale_daten_table1$`OP im HNO-Bereich` %in% c("n", "", "NA", "NaN"),
+  NA_character_,
+  trigeminale_daten_table1$`OP im HNO-Bereich`
+)
+
 result_procedures <- parse_procedure_descriptions(clean_text_vec)
 
-# Convert result to long format using tidyr pivot_longer
+
+# ========================================================================== #
+# Reshape parsed data to long format -----------------------------------------
+# ========================================================================== #
+
 long_df <- result_procedures %>%
   mutate(rowid = row_number()) %>%
-  pivot_longer(cols = everything(),
-               names_to = c(".value", "set"),
-               names_pattern = "(year|desc)(\\d+)") %>%
-# filter(!is.na(desc) & desc != "") %>%       # Keep relevant desc entries
-mutate(year = as.numeric(year))
+  pivot_longer(
+    cols = everything(),
+    names_to = c(".value", "set"),
+    names_pattern = "(year|desc)(\\d+)"
+  ) %>%
+  # Convert year to numeric
+  mutate(year = as.numeric(year))
 
+
+# ========================================================================== #
+# Fix years and descriptions -------------------------------------------------
+# ========================================================================== #
 
 long_df_fixed <- long_df %>%
-# Handle leading year (4-digit)
-mutate(
+  # Leading 4-digit year in desc column overrides year column
+  mutate(
     year_new = ifelse(str_detect(desc, "^\\d{4}"),
                       as.numeric(str_extract(desc, "^\\d{4}")),
                       year),
     desc = str_remove(desc, "^\\d{4}\\s*")
   ) %>%
-# Handle two-digit leading year (e.g., "05 ...")
-mutate(
+  # Handle two-digit leading year (e.g., "05 Something") in desc
+  mutate(
     year_new = ifelse(
       is.na(year_new) & str_detect(desc, "^(\\d{2})\\s"),
       as.numeric(ifelse(
@@ -131,24 +188,24 @@ mutate(
     ),
     desc = str_remove(desc, "^(\\d{2})\\s")
   ) %>%
-# Special case: "er Tonsillotomie" means 1995 if no year is present
-mutate(
+  # Special case: "er Tonsillotomie" => 1995 if no year present
+  mutate(
     year_new = ifelse(
       is.na(year_new) & str_detect(desc, "^er\\s*Tonsillotomie"),
       1995,
       year_new
     ),
-    desc = str_remove(desc, "^er\\s*") # Remove 'er' if it was used
+    desc = str_remove(desc, "^er\\s*")
   ) %>%
-# Clean multiple spaces etc.
-mutate(
-    desc = str_trim(desc)
-  ) %>%
-# Replace year
-mutate(year = year_new) %>%
-  dplyr::select(-year_new) %>%
-  dplyr::filter(!is.na(desc) & desc != "")
+  mutate(desc = str_trim(desc)) %>%
+  mutate(year = year_new) %>%
+  select(-year_new) %>%
+  filter(!is.na(desc) & desc != "")
 
+
+# ========================================================================== #
+# Translation dictionary for surgery descriptions ----------------------------
+# ========================================================================== #
 
 translation_map <- c(
   "Pansinusitis" = "Pansinusitis",
@@ -250,71 +307,69 @@ translation_map <- c(
   "NNH" = "Paranasal sinus surgery"
 )
 
-# Translate German descriptions to English
+
+# ========================================================================== #
+# Translate surgery descriptions ---------------------------------------------
+# ========================================================================== #
+
 long_df_fixed <- long_df_fixed %>%
-  mutate(desc_english = translation_map[desc]) %>%
-  mutate(desc_english = ifelse(is.na(desc_english), "Unknown", desc_english)) %>%
-  mutate(desc_english = factor(desc_english, levels = sort(unique(desc_english))))
+  mutate(
+    desc_english = translation_map[desc],
+    desc_english = ifelse(is.na(desc_english), "Unknown", desc_english),
+    desc_english = factor(desc_english, levels = sort(unique(desc_english)))
+  )
 
-## Create one hot data frame for later analysis ##
-long_df_fixed_one_hot <- long_df_fixed
 
-# Create unique row ids based on your original row indicator, assuming 'set' is row id (or create one if none)
-df_long <- long_df_fixed_one_hot %>%
+# ========================================================================== #
+# One-hot encode diagnoses for analysis --------------------------------------
+# ========================================================================== #
+
+# Create row_id assuming 'set' (from pivot_longer) reflects original rows
+long_df_fixed <- long_df_fixed %>%
   mutate(row_id = as.integer(set))
 
-# Filter out non-disease entries ("Unknown") from the one-hot process
-df_filtered <- df_long %>%
+# Filter out "Unknown" diagnoses
+df_filtered <- long_df_fixed %>%
   filter(desc_english != "Unknown")
 
-# One-hot encode desc_english per row_id
+# One-hot encode per row_id and diagnosis
 one_hot_partial <- df_filtered %>%
-  distinct(row_id, desc_english) %>% # unique diseases per row
-mutate(present = 1) %>%
+  distinct(row_id, desc_english) %>%
+  mutate(present = 1) %>%
   pivot_wider(names_from = desc_english, values_from = present, values_fill = 0)
 
-# Create a data frame with all original row_ids (1 to 1001)
-all_rows <- tibble(row_id = 1:1001)
+# Generate full set of row_ids and join to keep all rows, fill missing with zero
+all_rows <- tibble(row_id = 1:max(long_df_fixed$row_id, na.rm = TRUE))
 
-# Join to keep all rows, fill NAs with 0 meaning no presence
 one_hot_full <- all_rows %>%
   left_join(one_hot_partial, by = "row_id") %>%
   replace(is.na(.), 0) %>%
-  arrange(row_id)
+  arrange(row_id) %>%
+  select(-row_id)
 
-# Optionally drop the row_id if unneeded or rename
-one_hot_full <- one_hot_full %>% dplyr::select(-row_id)
-
-print(dim(one_hot_full)) # Should be 1001 rows
+print(dim(one_hot_full))
 print(head(one_hot_full))
 
-## Continue with plot ##
 
+# ========================================================================== #
+# Plot preparation and execution ---------------------------------------------
+# ========================================================================== #
 
-# Determine the minimum observed year for later use
 min_year <- min(long_df_fixed$year, na.rm = TRUE)
 
-# Create plotting year column: use NA-year mapped to "pseudo-year" below the minimum
 long_df_fixed <- long_df_fixed %>%
   mutate(year_plot = as.numeric(year),
          year_plot = ifelse(is.na(year_plot), min_year - 2, year_plot))
 
-# Remove unknown diagnoses (e.g. those not in translation map)
-long_df_fixed <- long_df_fixed %>%
-  filter(desc_english != "Unknown")
-
-# Reset factor levels to reflect actual data (post filtering)
 desc_levels <- sort(unique(long_df_fixed$desc_english))
 long_df_fixed$desc_english <- factor(long_df_fixed$desc_english, levels = desc_levels)
 
-# Prepare data frame to add vertical stripes behind points
 stripe_df <- data.frame(
   desc_english = desc_levels,
   xmin = seq_along(desc_levels) - 0.5,
   xmax = seq_along(desc_levels) + 0.5
 )
 
-# Calculate counts per disease for annotation above plot
 count_df <- long_df_fixed %>%
   group_by(desc_english) %>%
   summarise(count = n()) %>%
@@ -323,66 +378,54 @@ count_df <- long_df_fixed %>%
          ypos = max(long_df_fixed$year_plot, na.rm = TRUE) + 3)
 
 if (order_plot) {
-  # Order by descending count
-  desc_levels <- count_df %>%
+  desc_levels_ordered <- count_df %>%
     arrange(desc(count)) %>%
     pull(desc_english)
 
-  # Apply new factor levels to long_df
-  long_df$desc_english <- factor(long_df$desc_english, levels = desc_levels)
+  long_df_fixed$desc_english <- factor(long_df_fixed$desc_english, levels = desc_levels_ordered)
 
-  # Also reorder stripe_df and count_df accordingly
   stripe_df <- data.frame(
-    desc_english = desc_levels,
-    xmin = seq_along(desc_levels) - 0.5,
-    xmax = seq_along(desc_levels) + 0.5
+    desc_english = desc_levels_ordered,
+    xmin = seq_along(desc_levels_ordered) - 0.5,
+    xmax = seq_along(desc_levels_ordered) + 0.5
   )
+
   count_df <- count_df %>%
-    mutate(xpos = match(desc_english, desc_levels))
+    mutate(xpos = match(desc_english, desc_levels_ordered))
 }
 
-# Seed for reproducible jitter position
-set.seed(42)
+set.seed(42)  # For reproducible jitter
 
-# Generate plot
 p_ENT_surgery <- ggplot() +
-# Vertical color stripes alternating ivory2 and white background
-geom_rect(data = stripe_df,
+  geom_rect(data = stripe_df,
             aes(xmin = xmin, xmax = xmax, ymin = -Inf, ymax = Inf),
             fill = rep(c("ivory2", "white"), length.out = nrow(stripe_df)),
             inherit.aes = FALSE) +
-# Jitter points for diagnosis occurrences by year and disease
-geom_jitter(data = long_df_fixed,
+  geom_jitter(data = long_df_fixed,
               aes(x = desc_english, y = year_plot),
               width = 0.3, height = 0.3, alpha = 0.6, color = "black") +
-# Vertical text counts above stripes (numbers of cases per disease)
-geom_text(data = count_df,
+  geom_text(data = count_df,
             aes(x = xpos, y = ypos, label = count),
             vjust = 0, size = 3, angle = 90) +
-# X axis categorical labels for disease, preserve all levels
-scale_x_discrete(drop = FALSE) +
-# Y axis with breaks including "No year" pseudo-year label below the min_year
-scale_y_continuous(
+  scale_x_discrete(drop = FALSE) +
+  scale_y_continuous(
     breaks = c(min_year - 2, seq(min_year, max(long_df_fixed$year_plot, na.rm = TRUE))),
     labels = c("No year", as.character(seq(min_year, max(long_df_fixed$year_plot, na.rm = TRUE))))
   ) +
-# Axis labels and title
-labs(x = "Disease", y = "Year", title = "ENT surgeries over years") +
-# Minimal theme with smaller font size
-theme_minimal(base_size = 8) +
-# Customize axis text and grid
-theme(
+  labs(x = "Disease", y = "Year", title = "ENT surgeries over years") +
+  theme_minimal(base_size = 8) +
+  theme(
     axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-    panel.grid.major.x = element_blank(), # remove vertical grid lines
+    panel.grid.major.x = element_blank(),
     panel.grid.minor.x = element_blank(),
     panel.grid.major.y = element_line(color = "black", size = 0.3, linetype = "dashed")
   ) +
-# Add horizontal dashed lines at each year (behind points)
-geom_hline(yintercept = seq(min_year, max(long_df_fixed$year_plot, na.rm = TRUE)),
-             color = "grey80",
-             size = 0.3,
-             linetype = "dashed")
+  geom_hline(yintercept = seq(min_year, max(long_df_fixed$year_plot, na.rm = TRUE)),
+             color = "grey80", size = 0.3, linetype = "dashed")
 
-p_ENT_surgery
+print(p_ENT_surgery)
 
-ggsave(paste0("p_ENT_surgery", ".svg"), p_ENT_surgery, width = 12, height = 12)
+ggsave("p_ENT_surgery.svg", p_ENT_surgery, width = 12, height = 12)
+
+
+

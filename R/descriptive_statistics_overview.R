@@ -7,6 +7,7 @@
 #              and tabulations per variable category.
 ################################################################################
 
+
 # ======================== #
 # 1. Load Required Libraries
 # ======================== #
@@ -21,10 +22,56 @@ library(psych)
 # =============================== #
 
 # Import study data from Excel
-trigeminale_daten_table1 <- read_excel(
+openxlsx <- read_excel(
   "/home/joern/Aktuell/TrigeminalSensitivity/09Originale/Bormann Trigeminale Studie Daten.xlsx",
-  sheet = "Tabelle1"
+  sheet = "Tabelle1")
+
+# ========================================================================== #
+# Convert selected character columns to numeric -----------------------------
+# ========================================================================== #
+
+character_vars <- names(trigeminale_daten_table1)[sapply(trigeminale_daten_table1, is.character)]
+print(character_vars)
+character_to_numeric_vars <- c(
+  "Alter",
+  "Körpergröße",
+  "Riechvermögen unmittelbar nach Covid-19",
+  "Wie oft Covid-19?",
+  "Trinken Sie Alkohol?",
+  "Wenn ich einen frischen Minzkaugummi gekaut habe, habe ich das Gefühl besser Luft durch die Nase zu bekommen"
 )
+
+trigeminale_daten_table1[character_to_numeric_vars] <- lapply(trigeminale_daten_table1[character_to_numeric_vars], function(x) as.numeric(x))
+
+# Correct zeros when percentages were calculated from empty cells
+set_percent_na_if_not_numeric_multi <- function(df, col_pairs) {
+  # col_pairs: Named list or two-column matrix/data.frame,
+  # where each element/pair contains c("original_col", "percent_col")
+
+  for (pair in col_pairs) {
+    original_col <- pair[1]
+    percent_col <- pair[2]
+
+    # Check non-numeric entries
+    non_numeric_mask <- is.na(as.numeric(df[[original_col]]))
+
+    # Set respective percent column entries to NA where original is non-numeric
+    df[[percent_col]][non_numeric_mask] <- NA
+  }
+
+  return(df)
+}
+
+pairs_percent_from_other_variable = list(
+  c("Riechvermögen vor Covid",  "R1 in %"),
+  c("Riechvermögen unmittelbar nach Covid-19", "R2 in %"),
+  c("Derzeitiges Riechvermögen",  "R3 in %"),
+  c("Nasenatmung für beide Nasenlöcher", "R23"),
+  c("Nasenatmung für das rechte Nasenloch", "R24"),
+  c("Nasenatmung für das linke Nasenloch", "R25")
+)
+
+trigeminale_daten_table1 <- set_percent_na_if_not_numeric_multi(trigeminale_daten_table1, pairs_percent_from_other_variable)
 
 # Import variable categorization and labels
 variable_categories <- read_excel(
@@ -70,8 +117,9 @@ translation_map <- c(
 
   # Category 3 - COVID-19 history
   "Waren Sie bereits an Covid erkrankt?" = "Have you had COVID-19?",
+  "R1 in %" = "Smell ability before COVID-19",
   "Besteht oder bestand eine Riechminderung nach Covid-19?" = "Is or was there smell reduction after COVID-19?",
-  "Riechvermögen unmittelbar nach Covid-19" = "Smell ability immediately after COVID-19",
+  "R2 in %" = "Smell ability immediately after COVID-19",
   "Wie oft Covid-19?" = "How many times have you had COVID-19?",
   "Zeitraum 1" = "Period 1",
   "Riechminderung?" = "Smell reduction 1",
@@ -128,8 +176,7 @@ translation_map <- c(
     "Has your eye watering while cutting onions changed in the last 10 years?",
 
   # Category 6 - Rated olfactory function
-  "Riechvermögen vor Covid" = "Smell ability before COVID-19",
-  "Derzeitiges Riechvermögen" = "Current smell ability",
+  "R3 in %" = "Current smell ability",
   "Riech- und Schmeckvermögen vermindert" = "Reduced smell and taste ability",
   "Wenn ja, wie begann das Problem" = "If yes, how did the problem start",
   "Wie hat sich das Problem verändert?" = "How has the problem changed",
@@ -163,6 +210,9 @@ names(varlist) <- category_names
 
 category_vars <- split(variable_categories$Variable_german, variable_categories$Category_name)
 
+# Create mapping from German to English for renaming rows
+german_to_english_map <- setNames(variable_categories$Variable_english, variable_categories$Variable_german)
+
 # Descriptive statistics
 desc_stats <- lapply(category_vars, function(vars) {
   existing_vars <- vars[vars %in% colnames(trigeminale_daten_table1)]
@@ -176,7 +226,8 @@ desc_stats <- lapply(category_vars, function(vars) {
       unique_vals <- unique(na.omit(var_data))
       # Check if variable contains only j/n values OR only 0/1 values (ignoring NA)
       is_yes_no <- length(unique_vals) > 0 &&
-        (all(unique_vals %in% c("j", "n")) || all(unique_vals %in% c(0, 1)))
+        (all(unique_vals %in% c("j", "je", "ja", "n", "nein", "n.b.", "je ja")) ||
+           all(unique_vals %in% c(0, 1, "n.b.")))
 
       if(is_yes_no) {
         yes_no_vars <- c(yes_no_vars, var)
@@ -188,6 +239,12 @@ desc_stats <- lapply(category_vars, function(vars) {
     # Get describe output for numeric variables
     if(length(numeric_vars) > 0) {
       desc_output <- describe(trigeminale_daten_table1[numeric_vars], na.rm = TRUE)
+      # Rename rows to English
+      english_names <- german_to_english_map[rownames(desc_output)]
+      # Replace NA translations with original German names
+      english_names[is.na(english_names)] <- rownames(desc_output)[is.na(english_names)]
+      # Make unique to handle duplicates
+      rownames(desc_output) <- make.unique(english_names, sep = "*")
     } else {
       desc_output <- NULL
     }
@@ -199,17 +256,18 @@ desc_stats <- lapply(category_vars, function(vars) {
         n = sapply(yes_no_vars, function(v) sum(!is.na(trigeminale_daten_table1[[v]]))),
         count_yes = sapply(yes_no_vars, function(v) {
           var_data <- trigeminale_daten_table1[[v]]
-          unique_vals <- unique(na.omit(var_data))
-          # Count "j" for j/n variables, or 1 for 0/1 variables
-          if(all(unique_vals %in% c("j", "n"))) {
-            sum(var_data == "j", na.rm = TRUE)
-          } else {
-            sum(var_data == 1, na.rm = TRUE)
-          }
+          # Count "j" or "ja" responses, regardless of other values present
+          sum(var_data %in% c("j", "ja", "je", "je ja"), na.rm = TRUE)
         }),
         row.names = yes_no_vars,
         stringsAsFactors = FALSE
       )
+      # Rename rows to English with unique names
+      english_names <- german_to_english_map[rownames(yes_no_stats)]
+      # Replace NA translations with original German names
+      english_names[is.na(english_names)] <- rownames(yes_no_stats)[is.na(english_names)]
+      # Make unique to handle duplicates
+      rownames(yes_no_stats) <- make.unique(english_names, sep = "*")
 
       # If there's numeric output, match its structure
       if(!is.null(desc_output)) {
@@ -245,7 +303,7 @@ desc_stats <- lapply(category_vars, function(vars) {
   }
 })
 
-# Add custom "Migraine yes" row to "Disorders or health complaints" category
+
 if("Disorders or health complaints" %in% names(desc_stats)) {
   # Calculate migraine yes count
   migraine_yes_count <- sum(na.omit(trigeminale_daten_table1$`Wie oft haben Sie im Monat Migräne?` > 0))
@@ -287,11 +345,67 @@ if("Smoking and alcohol use" %in% names(desc_stats)) {
   )
 }
 
+# Correct "Waren Sie je Raucher?" variable to count "j" responses
+if("Smoking and alcohol use" %in% names(desc_stats)) {
+  # Find the row for "Waren Sie je Raucher?" using English name (with potential suffix)
+  waren_sie_row_name <- grep("^Have you ever smoked\\?",
+                             rownames(desc_stats$`Smoking and alcohol use`),
+                             value = TRUE)
+
+  if(length(waren_sie_row_name) > 0) {
+    # Get the variable data
+    waren_sie_var <- trigeminale_daten_table1$`Waren Sie je Raucher?`
+
+    # Count "j" responses (yes)
+    waren_sie_yes_count <- sum(grepl("^j$", as.character(waren_sie_var), ignore.case = FALSE), na.rm = TRUE)
+
+    # Total non-NA responses
+    waren_sie_total_n <- sum(!is.na(waren_sie_var))
+
+    # Update the existing row
+    desc_stats$`Smoking and alcohol use`[waren_sie_row_name, "max"] <- waren_sie_yes_count
+    desc_stats$`Smoking and alcohol use`[waren_sie_row_name, "n"] <- waren_sie_total_n
+  }
+}
+
+# Correct j in the same cell with year for nasal breathing consultation
+if("Disorders or health complaints" %in% names(desc_stats)) {
+  # Get the variable data
+  nasal_breathing_var <- trigeminale_daten_table1$`Ärztliche Vorstellung wegen Problematik der Nasenatmung`
+
+  # Count "j" responses (including those mixed with years like "j 2015")
+  # This checks if the string contains "j" (case-sensitive)
+  nasal_breathing_yes_count <- sum(grepl("^j", as.character(nasal_breathing_var), ignore.case = FALSE), na.rm = TRUE)
+
+  # Total non-NA responses
+  nasal_breathing_total_n <- sum(!is.na(nasal_breathing_var))
+
+  # Create new row for Nasal breathing consultation yes
+  nasal_breathing_row <- desc_stats$`Disorders or health complaints`[1, ]  # Copy structure
+  nasal_breathing_row[] <- NA  # Set all to NA
+  nasal_breathing_row$vars <- nrow(desc_stats$`Disorders or health complaints`) + 1
+  nasal_breathing_row$n <- nasal_breathing_total_n
+  nasal_breathing_row$max <- nasal_breathing_yes_count
+  rownames(nasal_breathing_row) <- "Nasal breathing consultation yes"
+
+  # Add to the data frame
+  desc_stats$`Disorders or health complaints` <- rbind(
+    desc_stats$`Disorders or health complaints`,
+    nasal_breathing_row
+  )
+}
+
 # Frequency tabulations
-tabulations <- lapply(category_vars, function(vars) {
+tabulations <- lapply(names(category_vars), function(cat_name) {
+  vars <- category_vars[[cat_name]]
   existing_vars <- vars[vars %in% colnames(trigeminale_daten_table1)]
-  lapply(existing_vars, function(var) table(trigeminale_daten_table1[[var]], useNA = "ifany"))
+  result <- lapply(existing_vars, function(var) {
+    table(trigeminale_daten_table1[[var]], useNA = "ifany")
+  })
+  names(result) <- existing_vars
+  result
 })
+names(tabulations) <- names(category_vars)
 
 # =============================== #
 # 4. Output
@@ -299,36 +413,69 @@ tabulations <- lapply(category_vars, function(vars) {
 
 # Print descriptive stats and tabulations
 print(desc_stats$Demographics)
-print(tabulations$Demographics)
+# print(tabulations$Demographics)
 
 # Print for Objective measurements as well
 print(desc_stats$`Objective measurements`)
-print(tabulations$`Objective measurements`)
+# print(tabulations$`Objective measurements`)
 
-# Etc
+# Print subjective chemosensory trigeminal perception
 desc_stats$`Subjective nasal chemosensory perception`
-tabulations$`Subjective nasal chemosensory perception`
+# tabulations$`Subjective nasal chemosensory perception`
 
+# Print disorders
 desc_stats$`Disorders or health complaints`
-tabulations$`Disorders or health complaints`
+disorders_summary <- data.frame(
+  Variable = rownames(desc_stats$`Disorders or health complaints`),
+  n = desc_stats$`Disorders or health complaints`$n,
+  count = desc_stats$`Disorders or health complaints`$max,
+  percentage = round(desc_stats$`Disorders or health complaints`$max /
+                       desc_stats$`Disorders or health complaints`$n * 100, 2)
+)
 
+print(disorders_summary)
+# tabulations$`Disorders or health complaints`
+
+# Print smoking and alcohol use
 desc_stats$`Smoking and alcohol use`
-tabulations$`Smoking and alcohol use`
+print("Smoking behavior is incorrect here. Refer to the dedicated code with corrections")
+# tabulations$`Smoking and alcohol use`
 
+# Print COVID-19 stats
 desc_stats$`COVID-19 history`
-tabulations$`COVID-19 history`
+# tabulations$`COVID-19 history`
+
+# Print subjective rated trigeminal chemosensory function
+desc_stats$`Ratings of nasal irritation and airflow`
+# tabulations$`Ratings of nasal irritation and airflow`
+
+# Print rated nasal airflow and irritation
+desc_stats$`Ratings of nasal irritation and airflow`
+# tabulations$`Ratings of nasal irritation and airflow`
+
+# Print subjective rated trigeminal chemosensory function
+desc_stats$`Subjective nasal chemosensory perception`
+# tabulations$`Subjective nasal chemosensory perception`
+
+# Print subjective rated olfactory chemosensory function
+desc_stats$`Rated olfactory function`
+tabulations$`Rated olfactory function`
+
+# Print measured variables
+desc_stats$`Objective measurements`
+# tabulations$`Objective measurements`
+
 
 # Check which test categories have been applied in how many
 lapply(lapply(desc_stats, "[[", "n"), max)
 
 # Check the added questions applied only in a subset of participants
-added_trigeminal_questions <- c("Wie oft schneiden Sie im Monat frische Zwiebeln?",
-  "Wenn Sie über das letzte halbe Jahr nachdenken, wie stark tränen Ihnen die Augen beim Zwiebelnschneiden?",
-  "Hat sich das Tränen Ihrer Augen in den letzten 10 Jahren verändert?")
+added_trigeminal_questions <- c("How often do you cut fresh onions per month?",
+                                "Thinking back over the past six months, how much did your eyes tear when cutting onions?",
+                                "Has your eye watering while cutting onions changed in the last 10 years?")
 max(desc_stats$`Subjective nasal chemosensory perception`$n[
   rownames(desc_stats$`Subjective nasal chemosensory perception`) %in% added_trigeminal_questions])
 
-added_migraine_questions <- c("Wie oft haben Sie im Monat Migräne?",  "Hat sich die Migräne in den letzten 10 Jahren verändert?")
+added_migraine_questions <- c("How often do you have migraine per month?",  "Has migraine changed over the last 10 years?")
 max(desc_stats$`Disorders or health complaints`$n[
   rownames(desc_stats$`Disorders or health complaints`) %in% added_migraine_questions])
-

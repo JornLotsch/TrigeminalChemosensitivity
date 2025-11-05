@@ -5,12 +5,40 @@ library(dplyr)
 library(tidyr)
 library(ggplot2)
 library(datefixR)
+library(psych)
 
 # Read Excel file with trigeminal sensitivity data
 trigeminale_daten_table1 <- read_excel(
   "/home/joern/Aktuell/TrigeminalSensitivity/09Originale/Bormann Trigeminale Studie Daten.xlsx",
   sheet = "Tabelle1"
 )
+
+# Correct zeros when percentages were calculated from empty cells
+set_percent_na_if_not_numeric_multi <- function(df, col_pairs) {
+  # col_pairs: Named list or two-column matrix/data.frame,
+  # where each element/pair contains c("original_col", "percent_col")
+
+  for (pair in col_pairs) {
+    original_col <- pair[1]
+    percent_col <- pair[2]
+
+    # Check non-numeric entries
+    non_numeric_mask <- is.na(as.numeric(df[[original_col]]))
+
+    # Set respective percent column entries to NA where original is non-numeric
+    df[[percent_col]][non_numeric_mask] <- NA
+  }
+
+  return(df)
+}
+
+pairs_percent_from_other_variable = list(
+  c("Riechvermögen vor Covid",  "R1 in %"),
+  c("Riechvermögen unmittelbar nach Covid-19", "R2 in %"),
+  c("Derzeitiges Riechvermögen",  "R3 in %")
+)
+
+trigeminale_daten_table1 <- set_percent_na_if_not_numeric_multi(trigeminale_daten_table1, pairs_percent_from_other_variable)
 
 # Variables of interest related to Covid and olfactory function
 Covid_vars <- c(
@@ -223,12 +251,12 @@ plot_data <- plot_data %>%
 p_Covid <- ggplot(plot_data, aes(x = Date, y = R_value, group = as.factor(id), color = min_R)) +
   geom_point() +
   geom_line() +
-  scale_color_gradient(low = "cornsilk3", high = "ivory4", na.value = "grey80") +
+  scale_color_gradient(high = "cornsilk3", low = "ivory4", na.value = "grey80") +
   theme_light(base_size = 8) +
   labs(
     x = "Date",
-    y = "Olfactory function (%)",
-    color = "Minimum\nOlfactory\nFunction",
+    y = "Olfactory function [%]",
+    color = "Olfactory\nFunction [%]",
     title = "Olfactory function in individuals with history of Covid-19"
   ) +
   theme(
@@ -242,4 +270,16 @@ p_Covid <- ggplot(plot_data, aes(x = Date, y = R_value, group = as.factor(id), c
 
 p_Covid
 
-ggsave(paste0("p_Covid", ".svg"), p_Covid, width = 12, height = 12)
+ggsave(paste0("p_Covid", ".svg"), p_Covid, width = 8, height = 8)
+
+
+# Calculate how long ago were the CCOVID-19 infections
+df_times_in_past <- df_filtered %>%
+  mutate(
+    months_since_Zeitraum_1 = as.numeric(Sys.Date() - `Zeitraum 1`) / 30.44,
+    months_since_Zeitraum_2 = as.numeric(Sys.Date() - `Zeitraum 2`) / 30.44,
+    months_since_Zeitraum_3 = as.numeric(Sys.Date() - `Zeitraum 3`) / 30.44
+  )
+
+describe(df_times_in_past)
+table(df_times_in_past$`Waren Sie bereits an Covid erkrankt?`)
