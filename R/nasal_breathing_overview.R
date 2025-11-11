@@ -3,7 +3,6 @@
 # Load required libraries ----------------------------------------------------
 # ========================================================================== #
 
-library(readxl)      # For reading Excel files
 library(stringr)     # String manipulation functions
 library(dplyr)       # Data manipulation verbs (filter, mutate, select, etc.)
 library(tidyr)       # Data tidying and reshaping
@@ -14,36 +13,14 @@ library(scales)      # Scaling functions for visualization
 library(purrr)       # Functional programming utilities
 
 
-# ========================================================================== #
-# Read trigeminal sensitivity data from Excel --------------------------------
-# ========================================================================== #
+# =============================== #
+# Read data
+# =============================== #
 
-trigem_data <- read_excel(
-  "/home/joern/Aktuell/TrigeminalSensitivity/09Originale/Bormann Trigeminale Studie Daten.xlsx",
-  sheet = "Tabelle1"
-)
+trigeminale_daten_corrected_translated <- read.csv("trigeminale_daten_corrected_translated.csv", check.names = FALSE)
 
-
-# ========================================================================== #
-# Convert selected character columns to numeric -----------------------------
-# ========================================================================== #
-
-# Specify character columns that should be numeric
-character_to_numeric_vars <- c(
-  "Alter",
-  "Körpergröße",
-  "Riechvermögen unmittelbar nach Covid-19",
-  "Wie oft Covid-19?",
-  "Trinken Sie Alkohol?",
-  "Wenn ich einen frischen Minzkaugummi gekaut habe, habe ich das Gefühl besser Luft durch die Nase zu bekommen"
-)
-
-# Convert those columns to numeric, suppressing warnings if any
-trigem_data[character_to_numeric_vars] <- lapply(
-  trigem_data[character_to_numeric_vars],
-  function(x) as.numeric(x)
-)
-
+character_vars <- names(trigeminale_daten_corrected_translated)[sapply(trigeminale_daten_corrected_translated, is.character)]
+print(character_vars)
 
 # ========================================================================== #
 # Subset and rename nasal breathing problem related variables ----------------
@@ -62,14 +39,14 @@ nasal_breathing_df <- trigem_data[, nasal_breathing_vars] %>%
   ) %>%
   mutate(age = as.integer(trigem_data$Alter))
 
-current_year <- year(Sys.Date())
+actual_year <- as.numeric(format(d <- as.Date("2023-11-01") + (as.Date("2024-05-01") - as.Date("2023-11-01"))/2, "%Y")) + (as.numeric(format(d, "%j")) - 1) / ifelse(((y <- as.numeric(format(d, "%Y"))) %% 4 == 0 & y %% 100 != 0) | (y %% 400 == 0), 366, 365)
 
 
 # ========================================================================== #
 # Define function to extract years robustly from messy raw text --------------
 # ========================================================================== #
 
-extract_years_custom <- function(text, age, current_year = 2025) {
+extract_years_custom <- function(text, age, actual_year = 2025) {
   if (is.na(text) || text == "n") {
     return(NA_character_)
   }
@@ -114,10 +91,10 @@ extract_years_custom <- function(text, age, current_year = 2025) {
 
   # Approximate years based on age
   if (text == "Grundschüler" && !is.na(age)) {
-    return(as.character(current_year - age + 8))
+    return(as.character(actual_year - age + 8))
   }
   if (text == "zur Geburt" && !is.na(age)) {
-    return(as.character(current_year - age))
+    return(as.character(actual_year - age))
   }
 
   # Keywords indicating ongoing or periodic events
@@ -142,7 +119,7 @@ extract_years_custom <- function(text, age, current_year = 2025) {
 nasal_breathing_df <- nasal_breathing_df %>%
   rowwise() %>%
   mutate(
-    extracted_years = list(extract_years_custom(raw_text, age, current_year)),
+    extracted_years = list(extract_years_custom(raw_text, age, actual_year)),
 
     actual_nasal_breathing_problem = if_else(
       str_detect(raw_text, "regelmäßig|halbjährlich|Quartal|Kindesalter") |

@@ -5,40 +5,20 @@
 ################################################################################
 
 # Load necessary libraries
-library(readxl)
 library(dplyr)
 library(stringr)
 library(tidyr)
 library(ggplot2)
 library(psych)
 
-# ========================================================================== #
-# 1. DATA IMPORT
-# ========================================================================== #
+# =============================== #
+# 1. Read data
+# =============================== #
 
-# Read data from Excel file
-trigeminale_daten_table1 <- read_excel(
-  "/home/joern/Aktuell/TrigeminalSensitivity/09Originale/Bormann Trigeminale Studie Daten.xlsx",
-  sheet = "Tabelle1"
-)
+trigeminale_daten_corrected_translated <- read.csv("trigeminale_daten_corrected_translated.csv", check.names = FALSE)
 
-# ========================================================================== #
-# Convert selected character columns to numeric -----------------------------
-# ========================================================================== #
-
-character_vars <- names(trigeminale_daten_table1)[sapply(trigeminale_daten_table1, is.character)]
+character_vars <- names(trigeminale_daten_corrected_translated)[sapply(trigeminale_daten_corrected_translated, is.character)]
 print(character_vars)
-character_to_numeric_vars <- c(
-  "Alter",
-  "Körpergröße",
-  "Riechvermögen unmittelbar nach Covid-19",
-  "Wie oft Covid-19?",
-  "Trinken Sie Alkohol?",
-  "Wenn ich einen frischen Minzkaugummi gekaut habe, habe ich das Gefühl besser Luft durch die Nase zu bekommen"
-)
-
-trigeminale_daten_table1[character_to_numeric_vars] <- lapply(trigeminale_daten_table1[character_to_numeric_vars], function(x) as.numeric(x))
-
 
 # Define smoking-related column names
 col_current_smoker <- "Rauchen Sie?"
@@ -52,7 +32,7 @@ col_cigs_former <- "Wenn ja: Wie viele Zigaretten am Tag?5"
 # 2. FIX SWAPPED COLUMNS (cigarette count vs. year)
 # ========================================================================== #
 
-trigeminale_daten_table1_fixed <- trigeminale_daten_table1 %>%
+trigeminale_daten_corrected_translated_fixed <- trigeminale_daten_corrected_translated %>%
   mutate(
     # Check if columns are swapped
     cigs_is_year = suppressWarnings(as.numeric(.data[[col_cigs_current]])) > 1900,
@@ -181,13 +161,14 @@ parse_former_period <- function(zeitraum_str, fallback_year) {
 # 4. PROCESS CURRENT SMOKERS
 # ========================================================================== #
 
-current_year <- as.numeric(format(Sys.Date(), "%Y"))
+actual_year <- as.numeric(format(d <- as.Date("2023-11-01") + (as.Date("2024-05-01") - as.Date("2023-11-01"))/2, "%Y")) + (as.numeric(format(d, "%j")) - 1) / ifelse(((y <- as.numeric(format(d, "%Y"))) %% 4 == 0 & y %% 100 != 0) | (y %% 400 == 0), 366, 365)
+
 
 # Convert cigarette counts
-zig_current <- convert_to_daily(trigeminale_daten_table1_fixed[[col_cigs_current]])
+zig_current <- convert_to_daily(trigeminale_daten_corrected_translated_fixed[[col_cigs_current]])
 
 # Clean smoking_since: convert 2-digit years to 4-digit
-smoking_since_cleaned <- as.numeric(trigeminale_daten_table1_fixed[[col_since_current]])
+smoking_since_cleaned <- as.numeric(trigeminale_daten_corrected_translated_fixed[[col_since_current]])
 smoking_since_cleaned <- ifelse(
   !is.na(smoking_since_cleaned) & smoking_since_cleaned < 100,
   ifelse(smoking_since_cleaned < 50,
@@ -198,8 +179,8 @@ smoking_since_cleaned <- ifelse(
 
 # Build current smokers dataframe
 current_smokers <- data.frame(
-  rowid = seq_len(nrow(trigeminale_daten_table1_fixed)),
-  is_current = trigeminale_daten_table1_fixed[[col_current_smoker]] == "j",
+  rowid = seq_len(nrow(trigeminale_daten_corrected_translated_fixed)),
+  is_current = trigeminale_daten_corrected_translated_fixed[[col_current_smoker]] == "j",
   smoking_since = smoking_since_cleaned,
   min_cigs = zig_current$min_per_day,
   max_cigs = zig_current$max_per_day,
@@ -219,13 +200,13 @@ current_smokers <- current_smokers %>%
 # ========================================================================== #
 
 # Convert cigarette counts for former smokers
-zig_former <- convert_to_daily(trigeminale_daten_table1_fixed[[col_cigs_former]])
+zig_former <- convert_to_daily(trigeminale_daten_corrected_translated_fixed[[col_cigs_former]])
 
 # Build former smokers dataframe
 former_smokers_raw <- data.frame(
-  rowid = seq_len(nrow(trigeminale_daten_table1_fixed)),
-  is_former = trigeminale_daten_table1_fixed[[col_former_smoker]] == "j",
-  zeitraum = trigeminale_daten_table1_fixed[[col_period_former]],
+  rowid = seq_len(nrow(trigeminale_daten_corrected_translated_fixed)),
+  is_former = trigeminale_daten_corrected_translated_fixed[[col_former_smoker]] == "j",
+  zeitraum = trigeminale_daten_corrected_translated_fixed[[col_period_former]],
   min_cigs = zig_former$min_per_day,
   max_cigs = zig_former$max_per_day,
   stringsAsFactors = FALSE
@@ -238,11 +219,11 @@ former_smokers_raw <- former_smokers_raw %>%
 
 # Determine fallback year for unspecified periods
 # Use minimum year from current smokers minus 3
-valid_current_years <- current_smokers$smoking_since[!is.na(current_smokers$smoking_since)]
-if (length(valid_current_years) > 0) {
-  fallback_year <- min(valid_current_years) - 3
+valid_actual_years <- current_smokers$smoking_since[!is.na(current_smokers$smoking_since)]
+if (length(valid_actual_years) > 0) {
+  fallback_year <- min(valid_actual_years) - 3
 } else {
-  fallback_year <- current_year - 50  # Default fallback
+  fallback_year <- actual_year - 50  # Default fallback
 }
 
 # Parse former smoker periods
@@ -265,7 +246,7 @@ former_smokers <- bind_rows(former_smokers_list)
 current_plot <- current_smokers %>%
   mutate(
     bar_start = ifelse(is.na(smoking_since), fallback_year, smoking_since),
-    bar_end = current_year,
+    bar_end = actual_year,
     period = 1,
     has_period = !is.na(smoking_since)
   ) %>%
@@ -286,8 +267,8 @@ all_smokers <- bind_rows(current_plot, former_plot)
 # Validate years (must be reasonable)
 all_smokers <- all_smokers %>%
   mutate(
-    bar_start = ifelse(bar_start < 1900 | bar_start > current_year + 1, fallback_year, bar_start),
-    bar_end = ifelse(bar_end < 1900 | bar_end > current_year + 1, fallback_year, bar_end)
+    bar_start = ifelse(bar_start < 1900 | bar_start > actual_year + 1, fallback_year, bar_start),
+    bar_end = ifelse(bar_end < 1900 | bar_end > actual_year + 1, fallback_year, bar_end)
   )
 
 # Create unique group ID for plotting (to handle interrupted periods)
@@ -299,8 +280,8 @@ all_smokers <- all_smokers %>%
 # ========================================================================== #
 
 # Define x-axis breaks and labels
-x_breaks <- c(fallback_year, seq(1950, current_year, by = 10))
-x_labels <- c("Period Not\nspecified", as.character(seq(1950, current_year, by = 10)))
+x_breaks <- c(fallback_year, seq(1950, actual_year, by = 10))
+x_labels <- c("Period Not\nspecified", as.character(seq(1950, actual_year, by = 10)))
 
 # Create plot
 p_smoking <- ggplot(all_smokers, aes(
@@ -324,7 +305,7 @@ p_smoking <- ggplot(all_smokers, aes(
   scale_x_continuous(
     breaks = x_breaks,
     labels = x_labels,
-    limits = c(fallback_year - 1, current_year + 1)
+    limits = c(fallback_year - 1, actual_year + 1)
   ) +
   scale_y_discrete(labels = function(x) {
     # Extract the first part before the dot/dash from interaction labels

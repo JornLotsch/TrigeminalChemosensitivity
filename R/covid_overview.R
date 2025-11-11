@@ -1,5 +1,4 @@
 # Load necessary libraries
-library(readxl)
 library(stringr)
 library(dplyr)
 library(tidyr)
@@ -7,38 +6,15 @@ library(ggplot2)
 library(datefixR)
 library(psych)
 
-# Read Excel file with trigeminal sensitivity data
-trigeminale_daten_table1 <- read_excel(
-  "/home/joern/Aktuell/TrigeminalSensitivity/09Originale/Bormann Trigeminale Studie Daten.xlsx",
-  sheet = "Tabelle1"
-)
+# =============================== #
+# Read data
+# =============================== #
 
-# Correct zeros when percentages were calculated from empty cells
-set_percent_na_if_not_numeric_multi <- function(df, col_pairs) {
-  # col_pairs: Named list or two-column matrix/data.frame,
-  # where each element/pair contains c("original_col", "percent_col")
+trigeminale_daten_corrected_translated <- read.csv("trigeminale_daten_corrected_translated.csv", check.names = FALSE)
 
-  for (pair in col_pairs) {
-    original_col <- pair[1]
-    percent_col <- pair[2]
+character_vars <- names(trigeminale_daten_corrected_translated)[sapply(trigeminale_daten_corrected_translated, is.character)]
+print(character_vars)
 
-    # Check non-numeric entries
-    non_numeric_mask <- is.na(as.numeric(df[[original_col]]))
-
-    # Set respective percent column entries to NA where original is non-numeric
-    df[[percent_col]][non_numeric_mask] <- NA
-  }
-
-  return(df)
-}
-
-pairs_percent_from_other_variable = list(
-  c("Riechvermögen vor Covid",  "R1 in %"),
-  c("Riechvermögen unmittelbar nach Covid-19", "R2 in %"),
-  c("Derzeitiges Riechvermögen",  "R3 in %")
-)
-
-trigeminale_daten_table1 <- set_percent_na_if_not_numeric_multi(trigeminale_daten_table1, pairs_percent_from_other_variable)
 
 # Variables of interest related to Covid and olfactory function
 Covid_vars <- c(
@@ -57,7 +33,7 @@ Covid_vars <- c(
 )
 
 # Subset the dataframe for these variables
-Covid_data <- trigeminale_daten_table1[, Covid_vars]
+Covid_data <- trigeminale_daten_corrected_translated[, Covid_vars]
 
 # Function to convert mixed-format date strings to Date objects
 convert_mixed_dates <- function(dates) {

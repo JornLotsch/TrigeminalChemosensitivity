@@ -34,7 +34,6 @@ library(grid)              # Grid graphics
 library(lubridate)         # Date/time handling
 library(MASS)              # Robust statistical methods
 library(purrr)             # Functional programming tools
-library(readxl)            # Excel file import
 library(reshape2)          # Data reshaping
 library(scales)            # Scale functions for visualization
 library(stringr)           # String manipulation
@@ -136,19 +135,16 @@ PDEplotGG <- function(Data) {
 }
 
 # ========================================================================== #
-# 4. DATA IMPORT AND PREPARATION
+# 4. Read data
 # ========================================================================== #
 
-# Import Excel data
-cat("Loading data...\n")
-trigeminale_daten_table1 <- read_excel(
-  "/home/joern/Aktuell/TrigeminalSensitivity/09Originale/Bormann Trigeminale Studie Daten.xlsx",
-  sheet = "Tabelle1"
-)
+trigeminale_daten_corrected_translated <- read.csv("trigeminale_daten_corrected_translated.csv", check.names = FALSE)
+
+
 
 # Extract and rename relevant trigeminal measures
-trigeminal_measures_vars <- c("R28", "Lateralisierung (x/20)", "CO2-Schwelle")
-trigeminal_measures_data <- trigeminale_daten_table1[, trigeminal_measures_vars]
+trigeminal_measures_vars <- c("AmmoLa intensity", "Lateralization (x/20)", "CO2 threshold")
+trigeminal_measures_data <- trigeminale_daten_corrected_translated[, trigeminal_measures_vars]
 names(trigeminal_measures_data) <- c("AmmoLa_intensity", "Lateralization", "CO2_threshold")
 
 # Report sample sizes for each measure
@@ -544,7 +540,7 @@ cat("\nAnalyzing age correlations...\n")
 
 # Add age to dataset and calculate correlations
 trigeminal_measures_data_age <- trigeminal_measures_data
-trigeminal_measures_data_age$age <- as.numeric(trigeminale_daten_table1$Alter)
+trigeminal_measures_data_age$age <- as.numeric(trigeminale_daten_corrected_translated$Age)
 corr_mat_age <- Hmisc::rcorr(
   as.matrix(trigeminal_measures_data_age),
   type = "pearson"
@@ -554,7 +550,7 @@ cat("\nAnalyzing sex differences...\n")
 
 # Add sex to dataset
 trigeminal_measures_data_sex <- trigeminal_measures_data
-trigeminal_measures_data_sex$sex <- as.factor(trigeminale_daten_table1$Geschlecht)
+trigeminal_measures_data_sex$sex <- as.factor(trigeminale_daten_corrected_translated$Gender)
 
 # Kruskal-Wallis tests for sex differences
 sex_diff_trig <- apply(

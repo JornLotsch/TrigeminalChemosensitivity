@@ -1,5 +1,4 @@
 # Load necessary libraries
-library(readxl)
 library(stringr)
 library(dplyr)
 library(tidyr)
@@ -54,17 +53,17 @@ split_year_description <- function(text_vec) {
 }
 
 
-# Read Excel file with chronic disease data
-trigeminale_daten_table1 <- read_excel(
-  "/home/joern/Aktuell/TrigeminalSensitivity/09Originale/Bormann Trigeminale Studie Daten.xlsx",
-  sheet = "Tabelle1"
-)
+# =============================== #
+# Read data
+# =============================== #
+
+trigeminale_daten_corrected_translated <- read.csv("trigeminale_daten_corrected_translated.csv", check.names = FALSE)
 
 # Split chronic disease descriptions into year/desc pairs
-result_chronic <- split_year_description(trigeminale_daten_table1$`chronische Erkrankungen`)
+result_chronic <- split_year_description(trigeminale_daten_corrected_translated$`Chronic disease`)
 
 # Split neurological disease descriptions into year/desc pairs
-result_neurological <- split_year_description(trigeminale_daten_table1$`neurologische Erkrankung`)
+result_neurological <- split_year_description(trigeminale_daten_corrected_translated$`Neurological disorder`)
 names(result_neurological) <- paste0(rep(c("year", "desc"), dim(result_neurological)[2] / 2),
                                      rep((dim(result_chronic)[2] / 2 + 1):(dim(result_chronic)[2] / 2 + dim(result_neurological)[2] / 2), each = 2))
 
@@ -110,6 +109,8 @@ translation_map <- c(
   "D.m." = "Diabetes mellitus (generic)",
   "D.m. Typ l" = "Diabetes mellitus type I",
   "D.m. Typ ll" = "Diabetes mellitus type II",
+  "D.m. Typ I" = "Diabetes mellitus type I",
+  "D.m. Typ II" = "Diabetes mellitus type II",
   "Diabethes" = "Diabetes mellitus (generic)",
   "Diabethes mellitus" = "Diabetes mellitus (generic)",
   "Diabethes mellitus Typ ll" = "Diabetes mellitus type II",
@@ -298,11 +299,11 @@ count_df <- long_df %>%
          ypos = max(long_df$year_plot, na.rm = TRUE) + 3)
 
 # Correct for allergy counts
-count_df$count[count_df$desc_english == "All allergies"] <- sum(na.omit(trigeminale_daten_table1$`Allergische Probleme` == "j"))
+count_df$count[count_df$desc_english == "All allergies"] <- sum(na.omit(trigeminale_daten_corrected_translated$`Allergic problems` == "j"))
 
 # Add missing allergy entries to long_df for proper jittering
 allergies_count_in_long_df <- sum(long_df$desc_english == "All allergies", na.rm = TRUE)
-corrected_allergies_count <- sum(na.omit(trigeminale_daten_table1$`Allergische Probleme` == "j"))
+corrected_allergies_count <- sum(na.omit(trigeminale_daten_corrected_translated$`Allergic problems` == "j"))
 missing_allergies <- corrected_allergies_count - allergies_count_in_long_df
 
 if (missing_allergies > 0) {
@@ -387,6 +388,8 @@ p_chronic_disseases <- ggplot() +
   ) +
   geom_hline(yintercept = seq(min_year, max(long_df$year_plot, na.rm = TRUE)),
              color = "grey80", size = 0.3, linetype = "dashed")
+
+p_chronic_disseases
 
 ggsave(paste0("p_chronic_disseases", ".svg"), p_chronic_disseases, width = 12, height = 12)
 

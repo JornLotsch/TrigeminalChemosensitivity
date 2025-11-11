@@ -83,16 +83,16 @@ parse_procedure_descriptions <- function(text_vec) {
   df
 }
 
-# Read Excel file with chronic disease data
-trigeminale_daten_table1 <- read_excel(
-  "/home/joern/Aktuell/TrigeminalSensitivity/09Originale/Bormann Trigeminale Studie Daten.xlsx",
-  sheet = "Tabelle1"
-)
+# =============================== #
+# Read data
+# =============================== #
+
+trigeminale_daten_corrected_translated <- read.csv("trigeminale_daten_corrected_translated.csv", check.names = FALSE)
 
 
 # Clean-up the OP columns before extracting information
-clean_text_vec <- ifelse(trigeminale_daten_table1$`OP im HNO-Bereich` %in% c("n", "", "NA", "NaN"), NA_character_,
-                         trigeminale_daten_table1$`OP im HNO-Bereich`)
+clean_text_vec <- ifelse(trigeminale_daten_corrected_translated$`Surgery in ENT region` %in% c("n", "", "NA", "NaN"), NA_character_,
+                         trigeminale_daten_corrected_translated$`Surgery in ENT region` )
 
 
 # Split ENT surgery descriptions into year/desc pairs

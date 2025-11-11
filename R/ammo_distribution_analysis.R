@@ -20,7 +20,7 @@ slog <- function(x, base = 10) {
 }
 
 # Original skewed data vector
-ammo_intensity <- trigeminale_daten_table1$R28
+ammo_intensity <- trigeminale_daten_corrected_translated$R28
 
 # Reflect the data (for left skewness) to positive domain
 ammo_intensity_reflect <- max(ammo_intensity, na.rm = TRUE) + 1 - ammo_intensity

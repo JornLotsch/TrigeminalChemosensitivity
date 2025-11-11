@@ -1,5 +1,4 @@
 # Load necessary libraries
-library(readxl)
 library(stringr)
 library(dplyr)
 library(tidyr)
@@ -8,20 +7,24 @@ library(lubridate)
 library(forcats)
 library(scales)
 
-# Read Excel file with trigeminal sensitivity data
-trigeminale_daten_table1 <- read_excel(
-  "/home/joern/Aktuell/TrigeminalSensitivity/09Originale/Bormann Trigeminale Studie Daten.xlsx",
-  sheet = "Tabelle1"
-)
+# =============================== #
+# Read data
+# =============================== #
+
+trigeminale_daten_corrected_translated <- read.csv("trigeminale_daten_corrected_translated.csv", check.names = FALSE)
+
+character_vars <- names(trigeminale_daten_corrected_translated)[sapply(trigeminale_daten_corrected_translated, is.character)]
+print(character_vars)
 
 # Variables of interest related to facial pain
 facial_pain_vars <- c("Gesichtsschmerzen", "R26", "R27")
 
 # Subset the dataframe for these variables
-facial_pain_data <- trigeminale_daten_table1[, facial_pain_vars]
+facial_pain_data <- trigeminale_daten_corrected_translated[, facial_pain_vars]
 
 # Get current year as numeric
-current_year <- year(Sys.Date())
+actual_year <- as.numeric(format(d <- as.Date("2023-11-01") + (as.Date("2024-05-01") - as.Date("2023-11-01"))/2, "%Y")) + (as.numeric(format(d, "%j")) - 1) / ifelse(((y <- as.numeric(format(d, "%Y"))) %% 4 == 0 & y %% 100 != 0) | (y %% 400 == 0), 366, 365)
+
 
 # Clean 'Gesichtsschmerzen' by removing quotes and trimming whitespace
 clean_pain <- str_trim(str_replace_all(facial_pain_data$Gesichtsschmerzen, '"', ""))
@@ -46,18 +49,18 @@ parse_dates <- function(txt) {
 
   # Handle "j" indicating 'yes' with no date -- assign current year as start and end
   if (txt == "j") {
-    return(c(start = current_year, end = current_year))
+    return(c(start = actual_year, end = actual_year))
   }
 
   # Handle "seit vielen jahren" or "schon immer" as very long durations
   if (str_detect(txt, "seit vielen jahren") | str_detect(txt, "schon immer")) {
-    return(c(start = min_year - 2, end = current_year))
+    return(c(start = min_year - 2, end = actual_year))
   }
 
   # Handle "seit <year>" meaning ongoing pain from year to current
   if (str_detect(txt, "^seit\\s*\\d{4}")) {
     year_extracted <- as.integer(str_extract(txt, "\\d{4}"))
-    return(c(start = year_extracted, end = current_year))
+    return(c(start = year_extracted, end = actual_year))
   }
 
   # Handle single year entries
@@ -88,7 +91,7 @@ result_df <- facial_pain_data %>%
   ) %>%
   dplyr::select(Gesichtsschmerzen, start_year, end_year, R26, R27)
 
-result_df$Prb <- trigeminale_daten_table1$Probandennummer
+result_df$Prb <- trigeminale_daten_corrected_translated$Probandennummer
 
 # Split comma-separated values in R27 into multiple columns
 max_parts <- max(str_count(result_df$R27, ",") + 1, na.rm = TRUE)
