@@ -44,9 +44,6 @@ get_var_type <- function(x) {
   else return("non-numeric")
 }
 
-
-library(dplyr)
-
 # Helper to check if numeric vector is consecutive 0..max
 is_consecutive_sequence <- function(x_num) {
   x_sorted <- sort(unique(x_num))
@@ -73,11 +70,11 @@ summarize_var <- function(x, var_type, var_name = NULL) {
 
   special_count_vars <- c(
     "how often do you have facial pain",
-    "what is the nature of facial pain"
+    "what is the nature of facial pain",
+    "odor identification (x/3)"
   )
 
   special_numeric_vars <- c(
-    "odor identification (x/3)"
   )
 
   if (var_name_lower %in% special_separately_vars) {
@@ -303,6 +300,81 @@ correct_facial_pain_nature_summary <- function(desc_stats) {
       Summary
     ))
 }
+
+correct_types <- tibble::tribble(
+  ~Variable_english, ~Correct_type,
+  "Age", "interval/ordinal",
+  "Gender", "nominal",
+  "Weight", "interval/ordinal",
+  "Height", "interval/ordinal",
+  "Allergic problems", "yes/no",
+  "Upper respiratory infection", "yes/no",
+  "Chronic sinusitis", "yes/no",
+  "Surgery in ENT region", "yes/no",
+  "Chronic disease", "yes/no",
+  "Neurological disorder", "yes/no",
+  "Medical consultation for nasal breathing problems", "yes/no",
+  "If yes, was therapy performed (and which one)", "yes/no",
+  "Facial pain", "yes/no",
+  "How often do you have facial pain", "nominal",
+  "What is the nature of facial pain", "nominal",
+  "How often do you have migraine per month", "interval/ordinal",
+  "Has migraine changed over the last 10 years", "interval/ordinal",
+  "Have you had COVID-19?", "yes/no",
+  "Is or was there smell reduction after COVID-19?", "yes/no",
+  "Smell ability before COVID-19", "interval/ordinal",
+  "Smell ability immediately after COVID-19", "interval/ordinal",
+  "How many times have you had COVID-19?", "count",
+  "Period 1", "Year(s), separately summarized",
+  "Smell reduction 1", "yes/no",
+  "Period 2", "Year(s), separately summarized",
+  "Smell reduction 2", "yes/no",
+  "Period 3", "Year(s), separately summarized",
+  "Smell reduction 3", "yes/no",
+  "Current smell ability", "interval/ordinal",
+  "Reduced smell and taste ability", "yes/no",
+  "If yes, how did the problem start", "interval/ordinal",
+  "How has the problem changed", "interval/ordinal",
+  "Sensitivity of the nose to stinging/burning stimuli", "interval/ordinal",
+  "Nasal airflow (both nostrils)", "interval/ordinal",
+  "Nasal airflow (right nostril)", "interval/ordinal",
+  "Nasal airflow (left nostril)", "interval/ordinal",
+  "Do you smoke?", "yes/no",
+  "If yes: how many cigarettes per day?", "Count or range, separately summarized",
+  "If yes: since when?", "separately summarized",
+  "Have you ever smoked?", "yes/no",
+  "If yes: in what time period?", "Year(s), separately summarized",
+  "If yes: how many cigarettes then per day?", "Count or range, separately summarized",
+  "Do you drink alcohol?", "interval/ordinal",
+  "Pungent or burning odors like smoke, vinegar, or nail polish remover elicit strong emotions in me", "interval/ordinal",
+  "After chewing a fresh mint gum, I feel I can breathe better through my nose", "interval/ordinal",
+  "I avoid carbonated beverages because they burn my nose (e.g., on burping)", "interval/ordinal",
+  "I consider my nasal breathing to be very good", "interval/ordinal",
+  "I dislike going to saunas because I perceive hot air in my nose as burning", "interval/ordinal",
+  "My eyes tear strongly when cutting onions", "interval/ordinal",
+  "Pungent or burning odors cause me to cough or sneeze", "interval/ordinal",
+  "I avoid burning or pungent smells (e.g., ammonia or chlorine)", "interval/ordinal",
+  "When I smell something biting or pungent, I panic, remembering similar situations", "interval/ordinal",
+  "In winter, I find cold air in my nose extremely uncomfortable", "interval/ordinal",
+  "When I eat horseradish, I find the burning in my nose especially bothersome", "interval/ordinal",
+  "Burning or pungent odors can cause unpleasant sensations or pain in my face", "interval/ordinal",
+  "I consciously and intensely perceive carbonation in drinks", "interval/ordinal",
+  "When it comes to slightly tingling or pungent odors, my nose is much more sensitive than others'", "interval/ordinal",
+  "I only use toothpaste with a very mild mint scent", "interval/ordinal",
+  "How often do you cut fresh onions per month?", "interval/ordinal",
+  "Thinking back over the past six months, how much did your eyes tear when cutting onions?", "interval/ordinal",
+  "Has your eye watering while cutting onions changed in the last 10 years?", "interval/ordinal",
+  "Lateralization (x/20)", "interval/ordinal",
+  "AmmoLa intensity", "interval/ordinal",
+  "Odor identification (x/3)", "count",
+  "CO2 threshold", "interval/ordinal"
+)
+
+# Replace Variable_type
+desc_stats <- desc_stats %>%
+  left_join(correct_types, by = "Variable_english") %>%
+  mutate(Variable_type = ifelse(!is.na(Correct_type), Correct_type, Variable_type)) %>%
+  select(-Correct_type)
 
 
 desc_stats <- correct_facial_pain_summary(desc_stats)
