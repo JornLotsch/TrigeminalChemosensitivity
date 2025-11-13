@@ -21,12 +21,12 @@ character_vars <- names(trigeminale_daten_corrected_translated)[sapply(trigemina
 print(character_vars)
 
 # Define smoking-related column names
-col_current_smoker <- "Rauchen Sie?"
-col_cigs_current <- "Wenn Ja: Wie viele Zigaretten am Tag?"
-col_since_current <- "Wenn ja: Seit wann?"
-col_former_smoker <- "Waren Sie je Raucher?"
-col_period_former <- "Wenn ja: In welchem Zeitraum?"
-col_cigs_former <- "Wenn ja: Wie viele Zigaretten am Tag?5"
+col_current_smoker <- "Do you smoke?"
+col_cigs_current <- "If yes: how many cigarettes per day?"
+col_since_current <- "If yes: since when?"
+col_former_smoker <- "Have you ever smoked?"
+col_period_former <- "If yes: in what time period?"
+col_cigs_former <- "If yes: how many cigarettes then per day?"
 
 # ========================================================================== #
 # 2. FIX SWAPPED COLUMNS (cigarette count vs. year)
@@ -179,7 +179,7 @@ smoking_since_cleaned <- ifelse(
 
 # Build current smokers dataframe
 current_smokers <- data.frame(
-  rowid = seq_len(nrow(trigeminale_daten_corrected_translated_fixed)),
+  ID = seq_len(nrow(trigeminale_daten_corrected_translated_fixed)),
   is_current = trigeminale_daten_corrected_translated_fixed[[col_current_smoker]] == "j",
   smoking_since = smoking_since_cleaned,
   min_cigs = zig_current$min_per_day,
@@ -204,7 +204,7 @@ zig_former <- convert_to_daily(trigeminale_daten_corrected_translated_fixed[[col
 
 # Build former smokers dataframe
 former_smokers_raw <- data.frame(
-  rowid = seq_len(nrow(trigeminale_daten_corrected_translated_fixed)),
+  ID = seq_len(nrow(trigeminale_daten_corrected_translated_fixed)),
   is_former = trigeminale_daten_corrected_translated_fixed[[col_former_smoker]] == "j",
   zeitraum = trigeminale_daten_corrected_translated_fixed[[col_period_former]],
   min_cigs = zig_former$min_per_day,
@@ -230,7 +230,7 @@ if (length(valid_actual_years) > 0) {
 former_smokers_list <- list()
 for (i in seq_len(nrow(former_smokers_raw))) {
   periods <- parse_former_period(former_smokers_raw$zeitraum[i], fallback_year)
-  periods$rowid <- former_smokers_raw$rowid[i]
+  periods$ID <- former_smokers_raw$ID[i]
   periods$mean_cigs <- former_smokers_raw$mean_cigs[i]
   periods$smoker_type <- "former"
   former_smokers_list[[i]] <- periods
@@ -250,7 +250,7 @@ current_plot <- current_smokers %>%
     period = 1,
     has_period = !is.na(smoking_since)
   ) %>%
-  dplyr::select(rowid, bar_start, bar_end, mean_cigs, smoker_type, period, has_period)
+  dplyr::select(ID, bar_start, bar_end, mean_cigs, smoker_type, period, has_period)
 
 # Prepare former smokers for plotting
 former_plot <- former_smokers %>%
@@ -259,7 +259,7 @@ former_plot <- former_smokers %>%
     bar_end = end,
     has_period = (start != fallback_year | end != fallback_year)
   ) %>%
-  dplyr::select(rowid, bar_start, bar_end, mean_cigs, smoker_type, period, has_period)
+  dplyr::select(ID, bar_start, bar_end, mean_cigs, smoker_type, period, has_period)
 
 # Combine all smokers
 all_smokers <- bind_rows(current_plot, former_plot)
@@ -273,7 +273,24 @@ all_smokers <- all_smokers %>%
 
 # Create unique group ID for plotting (to handle interrupted periods)
 all_smokers <- all_smokers %>%
-  mutate(group_id = paste(rowid, period, sep = "_"))
+  mutate(group_id = paste(ID, period, sep = "_"))
+
+
+# Add pack years
+calculate_pack_years <- function(cigarettes_per_day, years_smoked) {
+  # One pack contains 20 cigarettes
+  packs_per_day <- cigarettes_per_day / 20
+
+  # Calculate pack years
+  pack_years <- packs_per_day * years_smoked
+
+  return(pack_years)
+}
+
+years_smoked <- all_smokers$bar_end - all_smokers$bar_start
+years_smoked[years_smoked == 0 & all_smokers$bar_end == 1965] <- NA
+
+all_smokers$pack_years <- calculate_pack_years(cigarettes_per_day = all_smokers$mean_cigs, years_smoked)
 
 # ========================================================================== #
 # 7. CREATE VISUALIZATION
@@ -285,14 +302,14 @@ x_labels <- c("Period Not\nspecified", as.character(seq(1950, actual_year, by = 
 
 # Create plot
 p_smoking <- ggplot(all_smokers, aes(
-  y = reorder(interaction(factor(rowid), - rowid), mean_cigs),
-  color = mean_cigs
+  y = reorder(interaction(factor(ID), - ID), pack_years),
+  color = pack_years
 )) +
   # Bars for those with specified periods
   geom_errorbarh(
     data = all_smokers %>% filter(has_period),
     aes(xmin = bar_start, xmax = bar_end),
-    height = 0.3,
+    width = 0.3,
     linewidth = 1
   ) +
   # Points for those without specified periods
@@ -315,7 +332,7 @@ p_smoking <- ggplot(all_smokers, aes(
     low = "gold",
     high = "red",
     na.value = "grey50",
-    name = "Cigarettes/Day"
+    name = "Pack years"
   )  +
   labs(
     x = "Year",
@@ -338,7 +355,36 @@ print(p_smoking)
 ggsave("p_smoking.svg", p_smoking, width = 12, height = 12)
 
 # ========================================================================== #
-# 8. SUMMARY STATISTICS
+# 8. WRITE DATA
+# ========================================================================== #
+
+# Filter rows where ID appears more than once
+duplicated_rows <- all_smokers %>%
+  group_by(ID) %>%
+  filter(n() > 1) %>%
+  ungroup()
+
+# View the duplicated rows
+print(duplicated_rows)
+
+all_smokers_clean <- all_smokers %>%
+  group_by(ID) %>%
+  # If any row has smoker_type "current", keep only those rows with "current"
+  # Otherwise, for only "former" rows, keep the one with highest bar_end
+  filter(
+    if (any(smoker_type == "current")) {
+      smoker_type == "current"
+    } else {
+      bar_end == max(bar_end)
+    }
+  ) %>%
+  ungroup()
+max(table(all_smokers_clean$ID))
+
+write.csv(all_smokers_clean, "smoking_summary.csv")
+
+# ========================================================================== #
+# 9. SUMMARY STATISTICS
 # ========================================================================== #
 
 
@@ -349,7 +395,7 @@ cat("\n--- Smoker Counts by Type ---\n")
 smoker_counts <- all_smokers %>%
   group_by(smoker_type) %>%
   summarise(
-    total = n_distinct(rowid),
+    total = n_distinct(ID),
     with_period = sum(has_period),
     without_period = sum(!has_period)
   )
@@ -357,7 +403,7 @@ print(smoker_counts)
 
 # Overall summary
 cat("\n--- Overall Summary ---\n")
-cat("Total unique smokers in plot:", n_distinct(all_smokers$rowid), "\n")
+cat("Total unique smokers in plot:", n_distinct(all_smokers$ID), "\n")
 cat("Total smoking periods/bars plotted:", nrow(all_smokers), "\n")
 cat("Fallback year for unspecified periods:", fallback_year, "\n")
 
@@ -380,7 +426,7 @@ if (nrow(current_smokers) > 0) {
 
 cat("\nALL SMOKERS COMBINED:\n")
 all_cigs <- all_smokers %>%
-  group_by(rowid, smoker_type) %>%
+  group_by(ID, smoker_type) %>%
   slice(1) %>%  # Take one row per person
   ungroup() %>%
   dplyr::select(mean_cigs) %>%
@@ -392,6 +438,20 @@ if (nrow(all_cigs) > 0) {
   cat("No cigarette consumption data available.\n")
 }
 
+cat("\nALL SMOKERS COMBINED:\n")
+pack_years <- all_smokers %>%
+  group_by(ID, smoker_type) %>%
+  slice(1) %>%  # Take one row per person
+  ungroup() %>%
+  dplyr::select(pack_years) %>%
+  filter(!is.na(pack_years))
+
+if (nrow(pack_years) > 0) {
+  print(psych::describe(pack_years, na.rm = TRUE))
+} else {
+  cat("No cigarette consumption data available.\n")
+}
+
 # Smoking period length statistics
 cat("\n--- Smoking Period Length (Years) ---\n")
 
@@ -399,7 +459,7 @@ cat("\n--- Smoking Period Length (Years) ---\n")
 period_lengths <- all_smokers %>%
   filter(bar_start != fallback_year | bar_end != fallback_year) %>%
   mutate(period_length = bar_end - bar_start) %>%
-  dplyr::select(rowid, smoker_type, period_length, has_period)
+  dplyr::select(ID, smoker_type, period_length, has_period)
 
 cat("\nCURRENT SMOKERS (period length):\n")
 current_periods <- period_lengths %>%
@@ -421,6 +481,15 @@ if (nrow(former_periods) > 0) {
   print(psych::describe(former_periods, na.rm = TRUE))
 } else {
   cat("No period length data available for former smokers.\n")
+}
+
+cat("\nALL SMOKERS COMBINED (period length):\n")
+if (nrow(period_lengths) > 0) {
+  all_periods <- period_lengths %>%
+    dplyr::select(period_length)
+  print(psych::describe(all_periods, na.rm = TRUE))
+} else {
+  cat("No period length data available.\n")
 }
 
 cat("\nALL SMOKERS COMBINED (period length):\n")

@@ -1,45 +1,81 @@
-# Load necessary libraries
-library(stringr)
-library(dplyr)
-library(tidyr)
-library(ggplot2)
-library(datefixR)
-library(psych)
+################################################################################
+# COVID-19 Impact Analysis - Trigeminal Sensitivity Study
+# Author: Jorn Lotsch
+# Description: Comprehensive analysis of COVID-19 effects on olfactory function
+#              - Parsing mixed-format date strings (seasons, years, ranges)
+#              - Temporal visualization of smell ability changes
+#              - Data cleaning and type conversions
+#              - Timeline analysis of COVID-19 infections
+################################################################################
 
-# =============================== #
-# Read data
-# =============================== #
+# ========================================================================== #
+# 1. LOAD REQUIRED LIBRARIES
+# ========================================================================== #
 
-trigeminale_daten_corrected_translated <- read.csv("trigeminale_daten_corrected_translated.csv", check.names = FALSE)
+library(stringr)    # String manipulation and regex operations
+library(dplyr)      # Data manipulation and transformation
+library(tidyr)      # Data tidying and reshaping (pivot operations)
+library(ggplot2)    # Data visualization
+library(datefixR)   # Date fixing utilities
+library(psych)      # Psychological and statistical methods
+library(readxl)     # Excel file import
 
-character_vars <- names(trigeminale_daten_corrected_translated)[sapply(trigeminale_daten_corrected_translated, is.character)]
-print(character_vars)
+# ========================================================================== #
+# 2. DATA IMPORT
+# ========================================================================== #
 
+# Read the main corrected and translated dataset
+trigeminale_daten_corrected_translated <- read.csv(
+  "trigeminale_daten_corrected_translated.csv",
+  check.names = FALSE
+)
 
-# Variables of interest related to Covid and olfactory function
+# ========================================================================== #
+# 3. DEFINE VARIABLES OF INTEREST
+# ========================================================================== #
+
+# Variables related to COVID-19 and olfactory function
+# Includes infection status, smell reduction, smell ability measurements,
+# and temporal information about infection periods
 Covid_vars <- c(
-  "Waren Sie bereits an Covid erkrankt?",
-  "Besteht oder bestand eine Riechminderung nach Covid-19?",
-  "R1 in %",
-  "R2 in %",
-  "R3 in %",
-  "Wie oft Covid-19?",
-  "Zeitraum 1",
-  "Riechminderung?",
-  "Zeitraum 2",
-  "Riechminderung?2",
-  "Zeitraum 3",
-  "Riechminderung?3"
+  "Have you had COVID-19?",
+  "Is or was there smell reduction after COVID-19?",
+  "Smell ability before COVID-19",
+  "Smell ability immediately after COVID-19",
+  "Current smell ability",
+  "How many times have you had COVID-19?",
+  "Period 1",
+  "Smell reduction 1",
+  "Period 2",
+  "Smell reduction 2",
+  "Period 3",
+  "Smell reduction 3"
 )
 
 # Subset the dataframe for these variables
 Covid_data <- trigeminale_daten_corrected_translated[, Covid_vars]
 
-# Function to convert mixed-format date strings to Date objects
+# ========================================================================== #
+# 4. HELPER FUNCTIONS
+# ========================================================================== #
+
+#' Convert mixed-format date strings to Date objects
+#'
+#' @param dates Character vector of date strings in various formats
+#' @return Vector of Date objects
+#' @details Handles multiple date formats:
+#'   - Excel numeric dates
+#'   - "Jahr YYYY" (Year YYYY)
+#'   - German seasons with year: "Frühling 2020", "Winter 2021"
+#'   - Two-digit years: "Winter 21"
+#'   - Date ranges: "Zeitraum 2020-21"
+#'   - Ambiguous dates: "01.02.2022 o. 02/23"
+#'   - Missing/unknown values mapped to NA
 convert_mixed_dates <- function(dates) {
   # Mapping of German seasons to mid-season months
   season_month_map <- list(
-    "Frühling" = 4, "Fruehling" = 4, "Frühjahr" = 4, "Frühjar" = 4, "Frrühjahr" = 4, "Fruhjahr" = 4,
+    "Frühling" = 4, "Fruehling" = 4, "Frühjahr" = 4, "Frühjar" = 4,
+    "Frrühjahr" = 4, "Fruhjahr" = 4,
     "Sommer" = 7,
     "Herbst" = 10, "Jerbst" = 10,
     "Winter" = 1
@@ -56,20 +92,26 @@ convert_mixed_dates <- function(dates) {
   out <- rep(as.Date(NA), length(dates))
 
   # Handle Excel numeric date values
-  is_excel_num <- suppressWarnings(!is.na(as.numeric(dates)) & !is.na(as.Date(as.numeric(dates), origin = "1899-12-30")))
+  is_excel_num <- suppressWarnings(
+    !is.na(as.numeric(dates)) &
+      !is.na(as.Date(as.numeric(dates), origin = "1899-12-30"))
+  )
   excel_indices <- which(is_excel_num)
   if (length(excel_indices) > 0) {
-    out[excel_indices] <- as.Date(as.numeric(dates[excel_indices]), origin = "1899-12-30")
+    out[excel_indices] <- as.Date(
+      as.numeric(dates[excel_indices]),
+      origin = "1899-12-30"
+    )
   }
 
-  # Handle "Jahr YYYY"
+  # Handle "Jahr YYYY" format
   jahr_indices <- grep("^jahr \\d{4}$", dates_clean)
   if (length(jahr_indices) > 0) {
     years <- as.numeric(sub("jahr (\\d{4})", "\\1", dates_clean[jahr_indices]))
     out[jahr_indices] <- as.Date(paste0(years, "-07-01"))
   }
 
-  # Handle German seasons followed by year
+  # Handle German seasons followed by year (e.g., "Frühjahr 2020")
   season_indices <- grep("^(frühling|frühjahr|sommer|herbst|winter) \\d{4}$", dates_clean)
   if (length(season_indices) > 0) {
     for (i in season_indices) {
@@ -83,14 +125,14 @@ convert_mixed_dates <- function(dates) {
     }
   }
 
-  # Handle strings that are only a year
+  # Handle strings that are only a year (e.g., "2020")
   year_only_indices <- grep("^\\d{4}$", dates_clean)
   if (length(year_only_indices) > 0) {
     years <- as.numeric(dates_clean[year_only_indices])
     out[year_only_indices] <- as.Date(paste0(years, "-07-01"))
   }
 
-  # Handle two-digit years for Winter, Frühjahr, Sommer
+  # Handle two-digit years for seasons (e.g., "Winter 21")
   handle_two_digit_year <- function(ind, season_name, month_num) {
     if (length(ind) > 0) {
       for (i in ind) {
@@ -113,7 +155,11 @@ convert_mixed_dates <- function(dates) {
       start_year <- as.numeric(parts[1])
       end_year_raw <- parts[2]
       if (nchar(end_year_raw) == 2) {
-        end_year <- ifelse(as.numeric(end_year_raw) > 50, 1900 + as.numeric(end_year_raw), 2000 + as.numeric(end_year_raw))
+        end_year <- ifelse(
+          as.numeric(end_year_raw) > 50,
+          1900 + as.numeric(end_year_raw),
+          2000 + as.numeric(end_year_raw)
+        )
       } else {
         end_year <- as.numeric(end_year_raw)
       }
@@ -137,18 +183,35 @@ convert_mixed_dates <- function(dates) {
   return(out)
 }
 
-# Function to clean Covid data variables with appropriate conversions
+#' Clean COVID-19 data with appropriate type conversions
+#'
+#' @param df Data frame containing COVID-19 variables
+#' @return Cleaned data frame with converted types
+#' @details Performs the following conversions:
+#'   - Date variables (Period 1/2/3) converted using convert_mixed_dates()
+#'   - Yes/no responses converted to logical TRUE/FALSE
+#'   - Percentage values converted to numeric
+#'   - Count variables converted to numeric
 clean_covid_data <- function(df) {
   # Variable groups by expected types
-  date_vars <- grep("Zeitraum", names(df), value = TRUE)
-  yes_no_vars <- c("Waren Sie bereits an Covid erkrankt?", "Besteht oder bestand eine Riechminderung nach Covid-19?",
-                   "Riechminderung?", "Riechminderung?2", "Riechminderung?3")
-  percent_vars <- c("R1 in %", "R2 in %", "R3 in %")
-  count_vars <- c("Wie oft Covid-19?")
+  date_vars <- grep("Period", names(df), value = TRUE)
+  yes_no_vars <- c(
+    "Have you had COVID-19?",
+    "Is or was there smell reduction after COVID-19?",
+    "Smell reduction 1",
+    "Smell reduction 2",
+    "Smell reduction 3"
+  )
+  percent_vars <- c(
+    "Smell ability before COVID-19",
+    "Smell ability immediately after COVID-19",
+    "Current smell ability"
+  )
+  count_vars <- c("How many times have you had COVID-19?")
 
   clean_df <- df
 
-  # Convert Zeitraum variables using mixed date converter
+  # Convert Period variables using mixed date converter
   for (v in date_vars) {
     clean_df[[v]] <- convert_mixed_dates(clean_df[[v]])
   }
@@ -182,80 +245,178 @@ clean_covid_data <- function(df) {
   return(clean_df)
 }
 
-# Clean the data
+# ========================================================================== #
+# 5. DATA CLEANING AND PREPARATION
+# ========================================================================== #
+
+# Clean the COVID-19 data
 cleaned_covid_data <- clean_covid_data(Covid_data)
 
-# Replace zeros with NA in R percentage columns (considered errors)
-cols <- c("R1 in %", "R2 in %", "R3 in %")
+# Replace zeros with NA in smell ability columns (considered data errors)
+cols <- c(
+  "Smell ability before COVID-19",
+  "Smell ability immediately after COVID-19",
+  "Current smell ability"
+)
 cleaned_covid_data[cols] <- lapply(cleaned_covid_data[cols], function(x) {
   x[x == 0] <- NA
   x
 })
 
-# Prepare for plotting
+# ========================================================================== #
+# 6. PREPARE DATA FOR VISUALIZATION
+# ========================================================================== #
+
+# Prepare plotting dataframe
 df <- cleaned_covid_data
 
 # Add unique ID per case for grouping
-df$id <- seq_len(nrow(df))
+df$ID <- seq_len(nrow(df))
 
-# Filter rows: keep cases with Covid TRUE, or if unknown, any Zeitraum date present
+# Filter rows: keep cases with confirmed COVID-19, or if unknown status,
+# any Period date present (indicating infection despite missing status)
 df_filtered <- df %>%
-  filter(`Waren Sie bereits an Covid erkrankt?` == TRUE |
-           (is.na(`Waren Sie bereits an Covid erkrankt?`) &
-              (!is.na(`Zeitraum 1`) | !is.na(`Zeitraum 2`) | !is.na(`Zeitraum 3`))))
+  filter(
+    `Have you had COVID-19?` == TRUE |
+      (is.na(`Have you had COVID-19?`) &
+        (!is.na(`Period 1`) | !is.na(`Period 2`) | !is.na(`Period 3`)))
+  )
 
-# Reshape Zeitraum dates and corresponding R values into long format, paired by period
-plot_data <- df_filtered %>%
-  pivot_longer(
-    cols = c(starts_with("Zeitraum"), starts_with("R")),
-    names_to = c(".value", "Period"),
-    names_pattern = "(Zeitraum|R) ?(\\d)"
-  ) %>%
-  rename(Date = Zeitraum, R_value = R) %>%
+# ========================================================================== #
+# 7. RESHAPE DATA TO LONG FORMAT
+# ========================================================================== #
+
+# Manually reshape the data since column structure doesn't have numeric suffixes
+# Create long format by binding three separate subsets (one per time period)
+plot_data <- bind_rows(
+  # Time period 1: Before COVID-19
+  df_filtered %>%
+    transmute(
+      ID = ID,
+      `Have you had COVID-19?` = `Have you had COVID-19?`,
+      `Is or was there smell reduction after COVID-19?` =
+        `Is or was there smell reduction after COVID-19?`,
+      `How many times have you had COVID-19?` =
+        `How many times have you had COVID-19?`,
+      Period = "1",
+      Date = `Period 1`,
+      R_value = `Smell ability before COVID-19`
+    ),
+  # Time period 2: Immediately after COVID-19
+  df_filtered %>%
+    transmute(
+      ID = ID,
+      `Have you had COVID-19?` = `Have you had COVID-19?`,
+      `Is or was there smell reduction after COVID-19?` =
+        `Is or was there smell reduction after COVID-19?`,
+      `How many times have you had COVID-19?` =
+        `How many times have you had COVID-19?`,
+      Period = "2",
+      Date = `Period 2`,
+      R_value = `Smell ability immediately after COVID-19`
+    ),
+  # Time period 3: Current smell ability
+  df_filtered %>%
+    transmute(
+      ID = ID,
+      `Have you had COVID-19?` = `Have you had COVID-19?`,
+      `Is or was there smell reduction after COVID-19?` =
+        `Is or was there smell reduction after COVID-19?`,
+      `How many times have you had COVID-19?` =
+        `How many times have you had COVID-19?`,
+      Period = "3",
+      Date = `Period 3`,
+      R_value = `Current smell ability`
+    )
+) %>%
+  # Filter out rows with missing dates or smell ability values
   filter(!is.na(Date), !is.na(R_value))
 
+# ========================================================================== #
+# 8. CALCULATE MINIMUM OLFACTORY FUNCTION PER CASE
+# ========================================================================== #
+
 # Calculate minimum olfactory function per case for color mapping
+# This identifies subjects with the most severe smell reduction
 min_values <- plot_data %>%
-  group_by(id) %>%
+  group_by(ID) %>%
   summarise(min_R = min(R_value, na.rm = TRUE))
 
 # Join min_R to plotting data
 plot_data <- plot_data %>%
-  left_join(min_values, by = "id")
+  left_join(min_values, by = "ID")
+
+# ========================================================================== #
+# 9. CREATE MAIN VISUALIZATION
+# ========================================================================== #
 
 # Plot: lines and points per case, color scaled by minimum olfactory function
-p_Covid <- ggplot(plot_data, aes(x = Date, y = R_value, group = as.factor(id), color = min_R)) +
+# Darker colors indicate more severe smell reduction
+p_Covid <- ggplot(
+  plot_data,
+  aes(x = Date, y = R_value, group = as.factor(ID), color = min_R)
+) +
   geom_point() +
   geom_line() +
-  scale_color_gradient(high = "cornsilk3", low = "ivory4", na.value = "grey80") +
+  scale_color_gradient(
+    high = "cornsilk3",
+    low = "ivory4",
+    na.value = "grey80"
+  ) +
   theme_light(base_size = 8) +
   labs(
     x = "Date",
     y = "Olfactory function [%]",
     color = "Olfactory\nFunction [%]",
-    title = "Olfactory function in individuals with history of Covid-19"
+    title = "Olfactory function in individuals with history of COVID-19"
   ) +
   theme(
     axis.text.x = element_text(angle = 0, hjust = 1, vjust = 0.5),
     panel.grid.major.x = element_blank(),
     panel.grid.minor.x = element_blank(),
-    panel.grid.major.y = element_line(color = "black", size = 0.3, linetype = "dashed"),
+    panel.grid.major.y = element_line(
+      color = "black",
+      size = 0.3,
+      linetype = "dashed"
+    ),
     legend.position.inside = TRUE,
     legend.position = c(0.9, 0.15)
   )
 
-p_Covid
+# Display plot
+print(p_Covid)
 
+# Save plot as SVG
 ggsave(paste0("p_Covid", ".svg"), p_Covid, width = 8, height = 8)
 
+# ========================================================================== #
+# 10. TEMPORAL ANALYSIS - TIME SINCE INFECTION
+# ========================================================================== #
 
-# Calculate how long ago were the CCOVID-19 infections
+# Calculate how long ago the COVID-19 infections occurred
+# Study period: mid-point between November 2023 and May 2024
+actual_year <- as.Date("2023-11-01") +
+  (as.Date("2024-05-01") - as.Date("2023-11-01")) / 2
+
+# Calculate months since each infection period
 df_times_in_past <- df_filtered %>%
   mutate(
-    months_since_Zeitraum_1 = as.numeric(Sys.Date() - `Zeitraum 1`) / 30.44,
-    months_since_Zeitraum_2 = as.numeric(Sys.Date() - `Zeitraum 2`) / 30.44,
-    months_since_Zeitraum_3 = as.numeric(Sys.Date() - `Zeitraum 3`) / 30.44
+    months_since_Period_1 = as.numeric(actual_year - `Period 1`) / 30.44,
+    months_since_Period_2 = as.numeric(actual_year - `Period 2`) / 30.44,
+    months_since_Period_3 = as.numeric(actual_year - `Period 3`) / 30.44
   )
 
+# Display descriptive statistics
+cat("\nDescriptive statistics of time since infection:\n")
 psych::describe(df_times_in_past)
-table(df_times_in_past$`Waren Sie bereits an Covid erkrankt?`)
+
+# Tabulate COVID-19 status
+cat("\nCOVID-19 status distribution:\n")
+table(df_times_in_past$`Have you had COVID-19?`)
+
+# Save the temporal analyis
+write.csv(df_times_in_past, "covid_times_in_past.csv")
+
+# ========================================================================== #
+# END OF SCRIPT
+# ========================================================================== #

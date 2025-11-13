@@ -30,6 +30,8 @@ variable_categories <- read.csv("trigeminale_daten_variable_categories.csv")
 # Remove duplicated columns, keeping the first occurrence
 trigeminale_daten_corrected_translated <- trigeminale_daten_corrected_translated[ , !duplicated(names(trigeminale_daten_corrected_translated))]
 
+# Load global mappings (e.g., category labels, translation dictionaries).
+source("globals.R")
 
 # =============================== #
 # 3. Descriptive statistics and tabulations per category
@@ -384,6 +386,39 @@ desc_stats <- desc_stats %>%
   arrange(Category_name)
 table(desc_stats$Category_name)
 
+# Make further corrections based on analysis of health related variables (other R code)
+
+update_desc_stats_summary <- function(desc_stats, no_vector, variable_name) {
+  no_count <- sum(no_vector, na.rm = TRUE)
+  total_n <- length(no_vector)
+  yes_count <- total_n - no_count
+
+  summary_text <- paste0("no(", no_count, "), yes(", yes_count, "), n=", total_n)
+
+  desc_stats <- desc_stats %>%
+    mutate(Summary = if_else(Variable_english == variable_name, summary_text, Summary))
+
+  return(desc_stats)
+}
+
+# Chronic diseases
+onehot_chronic_diseases <- read.csv("onehot_chronic_diseases.csv", check.names = FALSE)
+head(onehot_chronic_diseases)
+
+desc_stats <- update_desc_stats_summary(
+  desc_stats = desc_stats,
+  no_vector = onehot_chronic_diseases$`no chronic disease`,
+  variable_name = "Chronic disease"
+)
+
+# Allergies
+desc_stats <- update_desc_stats_summary(
+  desc_stats = desc_stats,
+  no_vector = 1-onehot_chronic_diseases$`Allergic problems`,
+  variable_name = "Allergic problems"
+)
+
+head(desc_stats, n = 20)
 # Output as CSV
 write_csv(desc_stats, "descriptive_statistics_by_category.csv")
 

@@ -117,9 +117,89 @@ translation_map <- c(
   "R24" = "Nasal airflow (right nostril)",
   "R25" = "Nasal airflow (left nostril)",
 
-  # Category 8 - Objective measurements
+  # Category 8 - Psychophysical measurements
   "Lateralisierung (x/20)" = "Lateralization (x/20)",
   "R28" = "AmmoLa intensity",
   "Identifikationstest (x/3)" = "Odor identification (x/3)",
   "CO2-Schwelle" = "CO2 threshold"
+)
+
+
+variables_by_categories <- list(
+  Demographics = c("Age", "Gender", "Weight", "Height"),
+  Disorders_or_health_complaints = c(
+    "Allergic problems",
+    "Upper respiratory infection",
+    "Chronic sinusitis",
+    "Surgery in ENT region",
+    "Chronic disease",
+    "Neurological disorder",
+    "Medical consultation for nasal breathing problems",
+    "If yes, was therapy performed (and which one)",
+    "Facial pain",
+    "How often do you have facial pain",
+    "What is the nature of facial pain",
+    "How often do you have migraine per month",
+    "Has migraine changed over the last 10 years"
+  ),
+  COVID19_history = c(
+    "Have you had COVID-19?",
+    "Smell ability before COVID-19",
+    "Is or was there smell reduction after COVID-19?",
+    "Smell ability immediately after COVID-19",
+    "How many times have you had COVID-19?",
+    "Period 1",
+    "Smell reduction 1",
+    "Period 2",
+    "Smell reduction 2",
+    "Period 3",
+    "Smell reduction 3"
+  ),
+  Smoking_and_alcohol_use = c(
+    "Do you smoke?",
+    "If yes: how many cigarettes per day?",
+    "If yes: since when?",
+    "Have you ever smoked?",
+    "If yes: in what time period?",
+    "If yes: how many cigarettes then per day?",
+    "Do you drink alcohol?"
+  ),
+  Nasal_chemosensory_perception = c(
+    "Pungent or burning odors like smoke, vinegar, or nail polish remover elicit strong emotions in me",
+    "After chewing a fresh mint gum, I feel I can breathe better through my nose",
+    "I avoid carbonated beverages because they burn my nose (e.g., on burping)",
+    "I consider my nasal breathing to be very good",
+    "I dislike going to saunas because I perceive hot air in my nose as burning",
+    "My eyes tear strongly when cutting onions",
+    "Pungent or burning odors cause me to cough or sneeze",
+    "I avoid burning or pungent smells (e.g., ammonia or chlorine)",
+    "When I smell something biting or pungent, I panic, remembering similar situations",
+    "In winter, I find cold air in my nose extremely uncomfortable",
+    "When I eat horseradish, I find the burning in my nose especially bothersome",
+    "Burning or pungent odors can cause unpleasant sensations or pain in my face",
+    "I consciously and intensely perceive carbonation in drinks",
+    "When it comes to slightly tingling or pungent odors, my nose is much more sensitive than others'",
+    "I only use toothpaste with a very mild mint scent",
+    "How often do you cut fresh onions per month?",
+    "Thinking back over the past six months, how much did your eyes tear when cutting onions?",
+    "Has your eye watering while cutting onions changed in the last 10 years?"
+  ),
+  Rated_olfactory_function = c(
+    "Current smell ability",
+    "Reduced smell and taste ability",
+    "If yes, how did the problem start",
+    "How has the problem changed"
+  ),
+  Nasal_irritation_and_airflow = c(
+    "Sensitivity of the nose to stinging/burning stimuli",
+    "Nasal airflow (both nostrils)",
+    "Nasal airflow (right nostril)",
+    "Nasal airflow (left nostril)"
+  ),
+  Psychophysical_measurements = c(
+    "Lateralization (x/20)",
+    "AmmoLa intensity",
+    "Odor identification (x/3)",
+    "CO2 threshold"
+  )
 )

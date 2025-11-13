@@ -16,6 +16,7 @@ library(stringr)
 library(dplyr)
 library(tidyr)
 library(psych)
+library(purrr)
 
 # =============================== #
 # 2. Data Import & Metadata Setup
@@ -150,6 +151,16 @@ trigeminale_daten_raw_original[rows_to_update, c("R23", "R24", "R25")] <- NA
 print("All obsvered lateralization results:")
 print(table(trigeminale_daten_raw_original$`Lateralisierung (x/20)`))
 
+# Replace COVID missing with "j" when there is COVID-related information.
+
+# Convert 'Wie oft Covid-19?' to integer and find indices > 0
+covid_gt_0 <- which(as.integer(trigeminale_daten_raw_original$`Wie oft Covid-19?`) > 0)
+
+# For those indices, update 'Waren Sie bereits an Covid erkrankt?'
+trigeminale_daten_raw_original$`Waren Sie bereits an Covid erkrankt?`[covid_gt_0] <- "j"
+
+trigeminale_daten_raw_original$`Waren Sie bereits an Covid erkrankt?`
+
 # =============================== #
 # 5. Rename Variables to English
 # -------------------------------#
@@ -185,6 +196,6 @@ for (type in names(type_list)) {
 
 
 # Save the final cleaned, translated dataset and variable metadata files for analysis.
-write.csv(cbind.data.frame(Probandennummer = trigeminale_daten_raw_original_selected$Probandennummer,
+write.csv(cbind.data.frame(ID = trigeminale_daten_raw_original_selected$Probandennummer,
                            selected_vars_df), "trigeminale_daten_corrected_translated.csv", row.names = FALSE)
 write.csv(variable_categories, "trigeminale_daten_variable_categories.csv", row.names = FALSE)
