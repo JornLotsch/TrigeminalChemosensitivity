@@ -2,7 +2,7 @@
 
 A research project analyzing trigeminal sensitivity and related factors using machine learning, statistical analysis and data visualization in R.
 
-<img src="./wipfigure.png">
+<img src="./wip-figure.png " width="30%">
 
 ## Project Overview
 
