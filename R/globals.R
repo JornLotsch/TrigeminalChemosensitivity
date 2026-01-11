@@ -7,6 +7,30 @@
 ################################################################################
 
 # ======================== #
+# Functions
+# ======================== #
+
+#' Scale vector to specified range
+#'
+#' @param x Numeric vector to scale
+#' @param minX Desired minimum value
+#' @param maxX Desired maximum value
+#' @return Scaled vector in range [minX, maxX]
+scaleRange_01 <- function(x) {
+  (x - min(x)) / (max(x) - min(x))
+}
+
+#' Min-max normalization to [0,1] with fixed boundaries
+#'
+#' @param x Numeric vector to normalize
+#' @param minX Fixed minimum boundary
+#' @param maxX Fixed maximum boundary
+#' @return Normalized vector
+scale01minmax <- function(x, minX, maxX) {
+  (x - minX) / (maxX - minX)
+}
+
+# ======================== #
 # Global variables
 # ======================== #
 
@@ -203,3 +227,188 @@ variables_by_categories <- list(
     "CO2 threshold"
   )
 )
+
+
+# Translation list ENT surgeries and nasal breathing problems
+condensed_ENT_dictionary <- c(
+
+  # Adenoid procedures
+  "Adenotomie" = "Adenotomy",
+  "Adenotomie Kindesalter" = "Adenotomy",
+  "Kindesalter Adenotomie" = "Adenotomy",
+  "Adentomie" = "Adenotomy",
+
+  # Tonsil procedures
+  "Mandeln" = "Tonsillectomy",
+  "Mandeln OP" = "Tonsillectomy",
+  "Mandel OP" = "Tonsillectomy",
+  "Mandel Op" = "Tonsillectomy",
+  "Mandel-OP" = "Tonsillectomy",
+  "Kindesalter Mandeln" = "Tonsillectomy",
+  "Tonsillektomie" = "Tonsillectomy",
+
+  # Partial tonsil removal
+  "Tonsillotomie" = "Tonsillotomy",
+  "Tonsillotomie Kindheit" = "Tonsillotomy",
+  "Kindesalter Tonsillotomie" = "Tonsillotomy",
+  "Tonsillotomie Kindesalter" = "Tonsillotomy",
+  "Tonsillotomie jugend" = "Tonsillotomy",
+  "er Tonsillotomie" = "Tonsillotomy",
+
+  # Polyp surgery (nasal)
+  "Polypen" = "Nasal polyps surgery",
+  "Kleinkind Polypen" = "Adenoidectomy",
+  "Kindheit Polypen" = "Adenoidectomy",
+  "Kindesalter Polypen" = "Adenoidectomy",
+  "CRS Polypenentfernung 2x" = "Nasal polyps surgery",
+  "Polypen-Op" = "Nasal polyps surgery",
+  "OP Polypen Stirnhöhle" = "Sinus surgery",
+
+  # Nasal/sinus surgeries and trauma
+  "Nasenfraktur" = "Nasal fracture surgery",
+  "Nasen # OP" = "Nasal fracture surgery",
+  "Wucherungen Nase" = "Nasal polyps surgery",
+  "NNH" = "Sinus surgery",
+  "NNH Op" = "Sinus surgery",
+  "NNH links" = "Sinus surgery",
+
+  # Nasal septum procedures
+  "NSW" = "Nasal septoplasty",
+  "NSW OP" = "Nasal septoplasty",
+  "OP NSW" = "Nasal septoplasty",
+  "OP Nasenscheidewand" = "Nasal septoplasty",
+  "Nasenscheidewand" = "Nasal septoplasty",
+  "Nasenscheidewand OP" = "Nasal septoplasty",
+  "Begradigung Nasenscheidewand" = "Nasal septoplasty",
+  "Begradigung NSW" = "Nasal septoplasty",
+  "Septum OP" = "Nasal septoplasty",
+  "Septumkorrektur" = "Nasal septoplasty",
+  "Septumplastik" = "Nasal septoplasty",
+  "Septumplastik li." = "Nasal septoplasty",
+  "Septumdeviation" = "Nasal septoplasty",
+
+  # Turbinate procedures
+  "Nasenmuscheln Verkleinerung" = "turbinate surgery",
+  "Reduktion Nasenmuscheln" = "turbinate surgery",
+  "Verkleinerung Nasenmuscheln" = "turbinate surgery",
+  "Nasenmuschelverkleinerung" = "turbinate surgery",
+  "Laserung Nasenmuscheln" = "turbinate surgery",
+  "Lasertherapie" = "Nasal mucosa surgery",
+  "Laserung Nasenmuscheln" = "turbinate surgery",
+  "Verödung Nasenmuschel" = "turbinate surgery",
+  "Verödung Nasenmuscheln" = "turbinate surgery",
+  "Verödung" = "Nasal mucosa surgery",
+  "Stromwellentherapie" = "Radio wave therapy",
+  "Stromwellentherapie zum Abschwellen der Nasenmuscheln" = "Radio wave therapy",
+
+  # Nose correction / reconstruction
+  "Begradigung Nase" = "Nasal septoplasty",
+
+  # Ear surgeries
+  "Ohr anlegen" = "Otoplasty",
+  "Otoplastik" = "Otoplasty",
+  "Ohr li. Implantat" = "Ear implant",
+  "Knorpelplastik Ohr" = "Otoplasty",
+  "Austausch Hämmerchen Ohr" = "Malleus replacement (middle ear)",
+
+  # Tympanic membrane surgeries
+  "Trommelfell" = "Tympanic membrane surgery",
+  "Trommelfell 2x" = "Tympanic membrane surgery",
+  "Trommelfell-OP" = "Tympanic membrane surgery",
+  "Trommelfellimplantat" = "Tympanic membrane surgery",
+  "Trommelfellverschluss" = "Tympanic membrane surgery",
+  "Trommelfellschnitt" = "Tympanic membrane surgery",
+
+  # Ear trauma
+  "Knalltrauma" = "Acoustic trauma",
+
+  # Vocal cord / larynx
+  "Stimmband OP" = "Vocal cord surgery",
+  "Stimmknötchen" = "Vocal cord surgery",
+
+  # Oncological surgeries
+  "Mundbodenkarzinom" = "Oral carcinoma surgery",
+  "Parotisentfernung" = "Parotidectomy",
+  "Karzinom Hals" = "Neck carcinoma surgery",
+  "Karzinom Rachen li." = "pharyngeal carcinoma surgery",
+  "Medulläres Schildrüsenkarzinom" = "Thyroid carcinoma surgery",
+  "OP Halsbereich" = "Neck surgery",
+  "Abszess Rachen" = "Pharyngeal abscess surgery",
+  "Trauma Hals" = "Neck trauma surgery",
+
+  # Sinus and jaw procedures
+  "Fensterung" = "Fenestration",
+  "Fensterung Kieferhöhle" = "Caldwell-Luc procedure",
+  "Fensterung Kieferhöhle li." = "Caldwell-Luc procedure",
+  "Kiefernzyste" = "Jaw cyst removal",
+
+  # Thyroid procedures
+  "Schilddrüse" = "Thyroid surgery",
+  "Thyreodektomie" = "Thyroid surgery",
+
+  # General surgeries
+  "OP" = "Operation",
+  "Op geplant" = "Operation planned",
+  "Trauma Hals" = "Neck trauma surgery",
+
+  # Medications and therapies
+  "Antibiotika" = "Antibiotics",
+  "AB" = "Antibiotics",
+  "Cortisonspray" = "Cortisone spray",
+  "Cortison-NS" = "Cortisone spray",
+  "Cortison-Nasenspray" = "Cortisone spray",
+  "Kortison-NS" = "Cortisone spray",
+  "Cortison NS" = "Cortisone spray",
+  "Cortison NS, Desensibilisierung" = "Cortisone nasal spray and desensitization",
+  "Allergie Nasenspray Mometa" = "Cortisone spray",
+  "Mometason" = "Cortisone spray",
+
+  # Immunotherapy or allergy treatments
+  "Desensibilisierung" = "Hyposensitization",
+  "Hyposensibilisierung" = "Hyposensitization",
+  "Hyposensibilisierung, NT, Tabletten" = "Hyposensitization, nasal therapy, tablets",
+  "Antiallergika" = "Antiallergics",
+  "Cetirizin" = "Antiallergics",
+
+  # Respiratory therapies
+  "Atemgerät Schlaf" = "Obstructive Sleep Apnea Syndrome",
+  "Asthmadiagnostik" = "Asthma diagnostics",
+  "Bedarfsspray Asthma" = "Asthma rescue spray",
+  "Corticoidinhalation" = "Corticoid inhalation",
+
+  # Nasal remedies
+  "Nasenspray" = "Cortisone spray",
+  "Nasensalbe" = "Ointment",
+  "Meersalzinhalation" = "Sea salt inhalation",
+
+  # Miscellaneous
+  "Regelmäßige Untersuchungen" = "Regular checkups",
+  "Begradigung NSW" = "Nasal septal surgery",
+  "Salbe" = "Ointment",
+  "Creme" = "Ointment",
+  "Doprident" = "Doprident (medication)",
+  "Fluimveil" = "acetylcysteine",
+  "Rotlichthterapie" = "Red light therapy",
+  "Akupunktur" = "Acupuncture",
+  "Stirnhöhlenvereiderung?" = "Sinusitis",
+  "Pansinusitis" = "Sinusitis",
+  "Hals" = "Neck surgery",
+  "Verödung Nasenscheidewand" = "Nasal septal surgery",
+  "Erweiterung Durchgänge NNH" = "Sinus surgery",
+  "Verödung Nase" = "Nasal mucosa surgery",
+  "Paukenröhrchen" = "Tympanostomy tube insertion",
+  "Paukenröhrchen OP" = "Tympanostomy tube insertion",
+  "Knochewnimplantat (Mittelohrschwerhörigkeit)" = "Middle ear surgery",
+  "NSW Fensterung" = "Nasal septal surgery",
+  "Siebbeinhöhle" = "Sinus surgery",
+  "Abtragung Nasenschleimhaut" = "Nasal mucosa surgery",
+  "Septumperforation" = "Nasal septal surgery",
+
+  # Special cases
+  "j" = "Unspecified",
+  "n" = "No therapy"
+)
+
+
+
+

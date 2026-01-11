@@ -72,7 +72,6 @@ Covid_data <- trigeminale_daten_corrected_translated[, Covid_vars]
 #'   - Ambiguous dates: "01.02.2022 o. 02/23"
 #'   - Missing/unknown values mapped to NA
 convert_mixed_dates <- function(dates) {
-  # Mapping of German seasons to mid-season months
   season_month_map <- list(
     "Frühling" = 4, "Fruehling" = 4, "Frühjahr" = 4, "Frühjar" = 4,
     "Frrühjahr" = 4, "Fruhjahr" = 4,
@@ -82,11 +81,9 @@ convert_mixed_dates <- function(dates) {
   )
 
   # Clean and normalize date input strings
-  dates_clean <- tolower(dates)
+  dates_clean <- dates
   dates_clean <- sub("^jahr ?(\\d{4})$", "jahr \\1", dates_clean)
-  dates_clean <- gsub("frrühjahr|fruhjahr|frühjar", "frühjahr", dates_clean)
   dates_clean <- gsub("nicht bekannt|n\\.b\\.|unbekannt|na|^$", NA_character_, dates_clean)
-  dates_clean <- gsub("^jahr ?(\\d{3})$", NA_character_, dates_clean)
   dates_clean <- gsub("zeitraum.*", NA_character_, dates_clean)
 
   out <- rep(as.Date(NA), length(dates))
@@ -111,12 +108,14 @@ convert_mixed_dates <- function(dates) {
     out[jahr_indices] <- as.Date(paste0(years, "-07-01"))
   }
 
-  # Handle German seasons followed by year (e.g., "Frühjahr 2020")
-  season_indices <- grep("^(frühling|frühjahr|sommer|herbst|winter) \\d{4}$", dates_clean)
+  # Handle German seasons followed by year
+  season_indices <- grep("^(Frühling|Fruehling|Frühjahr|Frühjar|Frrühjahr|Fruhjahr|Sommer|Herbst|Jerbst|Winter) \\d{4}$", dates_clean)
+
   if (length(season_indices) > 0) {
     for (i in season_indices) {
       parts <- unlist(strsplit(dates_clean[i], " "))
-      season <- gsub("[^a-zA-Z]", "", parts[1])
+      season <- gsub("frrühjahr|fruhjahr|frühjar|fruehling", "Frühjahr", parts[1])
+      season <- gsub("jerbst", "Herbst", season)
       year <- as.numeric(parts[2])
       month <- season_month_map[[season]]
       if (!is.null(month)) {
@@ -213,7 +212,7 @@ clean_covid_data <- function(df) {
 
   # Convert Period variables using mixed date converter
   for (v in date_vars) {
-    clean_df[[v]] <- convert_mixed_dates(clean_df[[v]])
+    clean_df[[v]] <- convert_mixed_dates(dates = clean_df[[v]])
   }
 
   # Convert yes/no responses to logical TRUE/FALSE, NA if unknown
@@ -250,7 +249,7 @@ clean_covid_data <- function(df) {
 # ========================================================================== #
 
 # Clean the COVID-19 data
-cleaned_covid_data <- clean_covid_data(Covid_data)
+cleaned_covid_data <- clean_covid_data(df = Covid_data)
 
 # Replace zeros with NA in smell ability columns (considered data errors)
 cols <- c(
@@ -401,10 +400,50 @@ actual_year <- as.Date("2023-11-01") +
 # Calculate months since each infection period
 df_times_in_past <- df_filtered %>%
   mutate(
-    months_since_Period_1 = as.numeric(actual_year - `Period 1`) / 30.44,
-    months_since_Period_2 = as.numeric(actual_year - `Period 2`) / 30.44,
-    months_since_Period_3 = as.numeric(actual_year - `Period 3`) / 30.44
+    months_since_covid_period_1 = as.numeric(actual_year - `Period 1`) / 30.44,
+    months_since_covid_period_2 = as.numeric(actual_year - `Period 2`) / 30.44,
+    months_since_covid_period_3 = as.numeric(actual_year - `Period 3`) / 30.44
   )
+names(df_times_in_past)
+
+# Conditional updates
+# Correct number of times COVID according to information about olfactory changes
+# Load necessary library for date validation
+library(lubridate)
+
+# Helper: check if x is a date or not - TRUE if it is a date
+is_date <- function(x) {
+  inherits(x, "Date") | inherits(x, "POSIXct") | inherits(x, "POSIXlt")
+}
+
+df_times_in_past <- df_times_in_past %>%
+  rowwise() %>%
+  mutate(
+    covid_count_calc = sum(
+      (!is_date(`Period 1`) | (!is.na(`Smell reduction 1`) & `Smell reduction 1` > 0)),
+      (!is_date(`Period 2`) | (!is.na(`Smell reduction 2`) & `Smell reduction 2` > 0)),
+      (!is_date(`Period 3`) | (!is.na(`Smell reduction 3`) & `Smell reduction 3` > 0))
+    ),
+    `How many times have you had COVID-19?` = if_else(
+      covid_count_calc > `How many times have you had COVID-19?`,
+      covid_count_calc,
+      `How many times have you had COVID-19?`
+    )
+  ) %>%
+  ungroup()
+
+
+# Case 1: If "How many times have you had COVID-19?" == 1
+df_times_in_past$months_since_covid_period_2[df_times_in_past$`How many times have you had COVID-19?` == 1] <- Inf
+df_times_in_past$months_since_covid_period_3[df_times_in_past$`How many times have you had COVID-19?` == 1] <- Inf
+df_times_in_past$`Smell reduction 2`[df_times_in_past$`How many times have you had COVID-19?` == 1] <- 0
+df_times_in_past$`Smell reduction 3`[df_times_in_past$`How many times have you had COVID-19?` == 1] <- 0
+
+# Case 2: If "How many times have you had COVID-19?" == 2
+df_times_in_past$months_since_covid_period_3[df_times_in_past$`How many times have you had COVID-19?` == 2] <- Inf
+df_times_in_past$`Smell reduction 3`[df_times_in_past$`How many times have you had COVID-19?` == 2] <- 0
+
+
 
 # Display descriptive statistics
 cat("\nDescriptive statistics of time since infection:\n")
@@ -415,7 +454,7 @@ cat("\nCOVID-19 status distribution:\n")
 table(df_times_in_past$`Have you had COVID-19?`)
 
 # Save the temporal analyis
-write.csv(df_times_in_past, "covid_times_in_past.csv")
+write.csv(df_times_in_past, "covid_times_in_past.csv", row.names = FALSE)
 
 # ========================================================================== #
 # END OF SCRIPT

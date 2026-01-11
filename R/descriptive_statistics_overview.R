@@ -229,6 +229,14 @@ summarize_var <- function(x, var_type, var_name = NULL) {
 
 # Main routine
 
+# Check variables for descriptive statistics
+all_original_variable_names <- unlist(variables_by_categories, use.names = FALSE)
+length(all_original_variable_names)
+all_variable_names_in_anaylsis_set1 <- names(trigeminale_daten_corrected_translated)
+missing_vars_in_anaylsis_set1 <- setdiff(all_original_variable_names, all_variable_names_in_anaylsis_set1)
+print(missing_vars_in_anaylsis_set1)
+
+
 desc_stats <- tibble()
 for (v in names(trigeminale_daten_corrected_translated[ , -1])) {  # skip ID column if any
   x <- trigeminale_daten_corrected_translated[[v]]
@@ -422,4 +430,81 @@ head(desc_stats, n = 20)
 # Output as CSV
 write_csv(desc_stats, "descriptive_statistics_by_category.csv")
 
+
+
+
+# ========================================================================== #
+# B. Statistics from analysis data set; to be performed only AFTER running  "build_analysis_dataset.R"
+# ========================================================================== #
+
+
+completed_and_assembled_analysis_dataset <- read.csv("analysis_dataset.csv", check.names = FALSE)
+print("Variables in the analysis dataset (completed and numerically transformed)")
+print(names(completed_and_assembled_analysis_dataset))
+print(dim(completed_and_assembled_analysis_dataset))
+str(completed_and_assembled_analysis_dataset)
+
+
+# Select variables for descriptive statistics
+all_original_variable_names <- unlist(variables_by_categories, use.names = FALSE)
+length(all_original_variable_names)
+all_variable_names_in_anaylsis_set <- names(completed_and_assembled_analysis_dataset)
+missing_vars_in_anaylsis_set <- setdiff(all_original_variable_names, all_variable_names_in_anaylsis_set)
+print(missing_vars_in_anaylsis_set)
+
+completed_and_assembled_analysis_dataset_only_orginal_vars <- completed_and_assembled_analysis_dataset[,names(completed_and_assembled_analysis_dataset) %in% all_original_variable_names]
+completed_and_assembled_analysis_dataset_only_orginal_vars["Gender"] <- trigeminale_daten_corrected_translated$Gender
+completed_and_assembled_analysis_dataset_only_orginal_vars["Surgery in ENT region"] <- completed_and_assembled_analysis_dataset$`has ENT surgery`
+completed_and_assembled_analysis_dataset_only_orginal_vars["Chronic disease"] <- completed_and_assembled_analysis_dataset$`has chronic disease`
+completed_and_assembled_analysis_dataset_only_orginal_vars["If yes, was therapy performed (and which one)"] <-
+  completed_and_assembled_analysis_dataset$`Nasal_breathing_therapy_No therapy`
+completed_and_assembled_analysis_dataset_only_orginal_vars["Facial pain"] <- completed_and_assembled_analysis_dataset$`Has facial pain`
+completed_and_assembled_analysis_dataset_only_orginal_vars["How often do you have facial pain" ] <- completed_and_assembled_analysis_dataset$facial_pain_freq_code
+completed_and_assembled_analysis_dataset_only_orginal_vars[ "What is the nature of facial pain"] <- trigeminale_daten_corrected_translated["What is the nature of facial pain"]
+
+
+completed_and_assembled_analysis_dataset_only_orginal_vars["mean_cigs"] <- completed_and_assembled_analysis_dataset$mean_cigs
+completed_and_assembled_analysis_dataset_only_orginal_vars["pack_years"] <- completed_and_assembled_analysis_dataset$pack_years
+completed_and_assembled_analysis_dataset_only_orginal_vars["Reduced smell and taste ability"] <- 1-completed_and_assembled_analysis_dataset$reduced_smell_and_taste_ability_what_n
+
+dim(completed_and_assembled_analysis_dataset_only_orginal_vars)
+
+all_variable_names_in_amended_anaylsis_set <- names(completed_and_assembled_analysis_dataset_only_orginal_vars)
+missing_vars_in_amended_anaylsis_set <- setdiff(all_original_variable_names, all_variable_names_in_amended_anaylsis_set)
+print(missing_vars_in_amended_anaylsis_set)
+
+
+
+# Calculate descriptive stats for numeric variables only
+desc_stats_analysis_dataset <- psych::describe(completed_and_assembled_analysis_dataset_only_orginal_vars[sapply(completed_and_assembled_analysis_dataset_only_orginal_vars, is.numeric)], na.rm = TRUE)
+
+# Calculate IQR strings for numeric variables only
+iqr_values <- sapply(completed_and_assembled_analysis_dataset_only_orginal_vars[sapply(completed_and_assembled_analysis_dataset_only_orginal_vars, is.numeric)], function(x) {
+  qs <- quantile(x, probs = c(0.25, 0.75), na.rm = TRUE)
+  paste0(format(qs[1], digits=3), " - ", format(qs[2], digits=3))
+})
+
+# Convert to data frame to combine with desc_stats_analysis_dataset
+iqr_df <- data.frame(IQR = iqr_values, row.names = names(iqr_values))
+
+# Combine describe output and IQR into one data frame by row names (variable names)
+desc_table <- cbind(desc_stats_analysis_dataset, IQR = iqr_df$IQR)
+
+# Calculate column sums for numeric columns in the original data
+col_sums <- colSums(completed_and_assembled_analysis_dataset_only_orginal_vars[sapply(completed_and_assembled_analysis_dataset_only_orginal_vars, is.numeric)], na.rm = TRUE)
+
+# Convert to named vector matching desc_table rownames
+col_sums_vec <- col_sums[rownames(desc_table)]
+
+# Add sum as a new column to desc_table
+desc_table$Sum <- col_sums_vec
+
+# Print updated table
+print(desc_table)
+
+# =============================== #
+# 7. Save statistics
+# =============================== #
+
+write.csv(desc_table, "descriptive_statistics_analysis_dataset_not_imputed.csv", row.names = TRUE)
 

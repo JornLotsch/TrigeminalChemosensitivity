@@ -381,7 +381,7 @@ all_smokers_clean <- all_smokers %>%
   ungroup()
 max(table(all_smokers_clean$ID))
 
-write.csv(all_smokers_clean, "smoking_summary.csv")
+write.csv(all_smokers_clean, "smoking_summary.csv", row.names = FALSE)
 
 # ========================================================================== #
 # 9. SUMMARY STATISTICS

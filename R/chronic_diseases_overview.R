@@ -593,8 +593,8 @@ p_chronic_disseases <- ggplot() +
   geom_jitter(
     data = long_df,
     aes(x = desc_english, y = year_plot, color = is_neurological),
-    width = 0.3,
-    height = 0.3,
+    width = 0.4,
+    height = 0,
     alpha = 0.6,
     show.legend = FALSE
   ) +
@@ -698,7 +698,7 @@ print(sum(rowSums(one_hot_encoded[,-1]) > 0))
 
 # Add column for subjects with no diseases
 one_hot_encoded <- one_hot_encoded %>%
-  mutate("no chronic disease" = if_else(rowSums(select(., -ID)) == 0, 1, 0))
+  mutate("has chronic disease" = if_else(rowSums(select(., -ID)) == 0, 0, 1))
 
 
 # Export one-hot encoded data
