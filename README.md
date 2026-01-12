@@ -160,18 +160,14 @@ These measures were combined with 15 TriFunQ questionnaire items (0.47% missing 
    - Spearman rank correlations between AmmoLa and other trigeminal measures
    - Pearson correlations with age
    - Kruskal-Wallis tests for biological sex associations
-   - Result: Generally weak and non-significant correlations
 
 2. **Agreement at Sensitivity Extremes**
    - Fisher's exact tests for 2×2 contingency tables
-   - Result: Significant enrichment of highly sensitive individuals between AmmoLa and CO₂ measures (OR=1.99, p=0.014)
-   - No significant association with lateralization scores (p=0.81)
 
 3. **Group Comparisons**
    - Wilcoxon-Mann-Whitney U rank-sum tests
    - Effect sizes: Cohen's d with Hedges' correction
    - 95% bootstrap confidence intervals (1,000 iterations)
-   - Result: Three TriFunQ items showed small but significant effects; AmmoLa showed expected large effect (d=-2.71)
 
 ### Composite Phenotypes (Y_trig2 & Y_trig3)
 
@@ -195,16 +191,13 @@ These measures were combined with 15 TriFunQ questionnaire items (0.47% missing 
 
 **Definition:**
 - Unidimensional phenotype: row means across 16 variables (15 TriFunQ + transformed AmmoLa)
-- Distribution characteristics: Normal, unimodal (mean=1.42, SD=0.43)
-- Anderson-Darling test: A=0.983, p=0.366 (non-significant, supporting normality)
-- Gaussian Mixture Modeling: Single mode optimal (likelihood ratio tests)
+- Distribution testing: Anderson-Darling normality tests
+- Gaussian Mixture Modeling: 1-4 modes with likelihood ratio tests for model selection
 
 **Principal Component Analysis:**
-- PCA retained 4 components (eigenvalue >1): explained 43.6% of variance
-- >90% variance requires 14 components (indicating complex data structure)
-- PC1: Variables related to pungent odors
-- PC2: AmmoLa intensity, minty/onion sensations, nasal breathing questions
-- No clear discrete groups observed in PC1-PC2 projection
+- PCA with Kaiser-Guttman criterion (eigenvalue >1) for component retention
+- Examination of variable loadings on principal components
+- Visualization of samples projected onto principal component space
 
 #### Cluster-Based Trigeminal Phenotype (Y_trig3)
 
@@ -215,16 +208,14 @@ Systematic evaluation across multiple dimensionality reduction techniques:
 - **Clustering algorithms** (8): k-means, PAM, hierarchical (Ward, single, average, median, complete, centroid linkage)
 - **Cluster determination**: NbClust package (30 validity indices, majority voting)
 
-**Optimal Solution:**
-- **Method**: UMAP projection + hierarchical centroid linkage
-- **Result**: 2 clusters (Cluster 1: n=551; Cluster 2: n=450)
-- **Quality metrics** (6): Silhouette index, Dunn index, Davies-Bouldin index, Calinski-Harabasz index, DBCV index, within-cluster inertia
+**Evaluation Approach:**
+- Selection based on highest combined ranking across 6 quality metrics
+- Quality metrics (6): Silhouette index, Dunn index, Davies-Bouldin index, Calinski-Harabasz index, DBCV index, within-cluster inertia
 
-**Cluster Characterization:**
-- **Primary distinction**: Sensitivity to pungent odors (large effect sizes: d>1.1)
-- **Item examples**: "I avoid burning or pungent smells" (d=1.25, p<10⁻²⁰); "When I smell something biting or pungent, I panic" (d=1.14, p<10⁻²⁰)
-- **Secondary features**: Nasal breathing and discomfort (moderate-to-small effects)
-- **Psychophysical measures**: AmmoLa intensity differed significantly (p=5.4×10⁻⁵, d=-0.38); lateralization and CO₂ thresholds showed minimal separation
+**Cluster Comparison:**
+- Wilcoxon-Mann-Whitney U rank-sum tests for comparing trigeminal variables across clusters
+- Cohen's d effect sizes with bootstrap-derived 95% confidence intervals
+- Analysis includes questionnaire items, lateralization scores, and CO₂ thresholds
 
 ---
 
@@ -235,7 +226,7 @@ Systematic evaluation across multiple dimensionality reduction techniques:
 **[read_data_and_basic_corrections.R](R/read_data_and_basic_corrections.R) & [build_analysis_dataset.R](R/build_analysis_dataset.R)**
 
 Data preprocessing pipeline:
-1. Excel data import from Bormann Trigeminale Studie Daten.xlsx
+1. Excel data import from source file
 2. Data validation, error correction, and typographical error fixing
 3. German-to-English translation of categorical variables
 4. Temporal variable extraction from free-text responses
@@ -247,8 +238,8 @@ Data preprocessing pipeline:
 - Gender: one-hot encoded (male, female, diverse, missing indicator)
 
 #### Category 2: Disorders or Health Complaints (n=180)
-- **Chronic diseases** (one-hot encoded): Hypertension, allergies, migraine, neurological disorders, chronic sinusitis, diabetes, asthma, hypothyroidism, atopic dermatitis, depression, epilepsy, MS, Hashimoto's thyroiditis, rheumatism, polyneuropathy, ADHD, allergic asthma, Crohn's disease, etc.
-- **ENT surgeries** (one-hot encoded): Adenotomy, tonsillotomy, nasal polyps surgery, nasal septum surgery, tonsillectomy, inferior turbinate cauterization, otoplasty, etc.
+- **Chronic diseases** (one-hot encoded): Extracted from free text, standardized, translated to English, and mapped to canonical medical terminology
+- **ENT surgeries** (one-hot encoded): Extracted from free text, standardized, and categorized
 - **Facial pain**: Presence (0=no, 1=past, 2=current), frequency categories, 4 quality descriptors (pulling, stabbing, pressing, burning)
 - **Nasal breathing**: Medical consultation status, ongoing therapy status
 
@@ -345,10 +336,6 @@ Data preprocessing pipeline:
 
 ---
 
-## Study Cohort Characteristics
-
----
-
 ## Usage
 
 **Data Preparation** (required first):
@@ -375,30 +362,9 @@ source("R/ammo_distribution_analysis.R")
 
 ---
 
-- **Sample size**: 1,001 participants
-- **Gender**: 598 women, 396 men, 5 diverse (2 unreported)
-- **Age**: Mean 44.2 years (SD 16.8, range 18-86)
-- **Weight**: Mean 76.6 kg (SD 17.1, range 43-172 kg)
-- **Height**: Mean 172.2 cm (SD 9.6, range 146-208 cm)
+## Data Privacy and Compliance
 
-**Health Characteristics:**
-- Chronic diseases: 431 participants (43.0%)
-- ENT surgeries: 242 participants (24.2%)
-- Facial pain: 52 participants (5.2%)
-- Nasal breathing problems: 154 participants (15.4%)
-- COVID-19 exposure: 834 participants (83.3%)
-
-**Behavioral Characteristics:**
-- Current smokers: 172 participants (17.2%)
-- Former smokers: 239 participants (23.9%)
-- Never smokers: 590 participants (59.0%)
-- Alcohol consumption: 822 participants (82.2%)
-
-**Trigeminal Sensitivity Measures:**
-- AmmoLa intensity: All 1,001 participants
-- Lateralization test: 458 participants
-- CO₂ threshold (breath-hold protocol): 336 participants
-- TriFunQ questionnaire: 1,001 participants (0.47% missing)
+All data handling and analysis procedures adhere to applicable data protection regulations, including GDPR (General Data Protection Regulation) and institutional research ethics guidelines. Data security measures are implemented throughout the preprocessing and analysis pipeline to ensure participant confidentiality and appropriate handling of sensitive health information.
 
 ---
 
