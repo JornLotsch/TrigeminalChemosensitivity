@@ -355,6 +355,110 @@ print(p_smoking)
 ggsave("p_smoking.svg", p_smoking, width = 12, height = 12)
 
 # ========================================================================== #
+# 7b. CREATE VISUALIZATION FOR ALL PARTICIPANTS (FORCED UNSORTED Y, 1 AT TOP)
+# ========================================================================== #
+
+# One row per participant (IDs 1..nrow(trigeminale_daten_corrected_translated_fixed))
+all_ids <- data.frame(
+  ID = seq_len(nrow(trigeminale_daten_corrected_translated_fixed)),
+  stringsAsFactors = FALSE
+)
+
+# Summarise smoking info from all_smokers
+smoking_summary_per_id <- all_smokers %>%
+  dplyr::group_by(ID) %>%
+  dplyr::summarise(
+    bar_start  = min(bar_start, na.rm = TRUE),
+    bar_end    = max(bar_end,   na.rm = TRUE),
+    mean_cigs  = mean(mean_cigs,   na.rm = TRUE),
+    pack_years = mean(pack_years,  na.rm = TRUE),
+    has_period = any(has_period),
+    smoker_type = dplyr::case_when(
+      any(smoker_type == "current") ~ "current",
+      any(smoker_type == "former")  ~ "former",
+      TRUE                          ~ NA_character_
+    ),
+    .groups = "drop"
+  )
+
+# Fix Inf from min/max with all NA
+smoking_summary_per_id$bar_start[is.infinite(smoking_summary_per_id$bar_start)] <- NA
+smoking_summary_per_id$bar_end[is.infinite(smoking_summary_per_id$bar_end)]     <- NA
+
+# Join to all IDs and define factor with REVERSED levels (1 at TOP, 1001 at bottom)
+all_cases_for_plot <- all_ids %>%
+  dplyr::left_join(smoking_summary_per_id, by = "ID") %>%
+  dplyr::mutate(
+    bar_start   = ifelse(is.na(bar_start), fallback_year, bar_start),
+    bar_end     = ifelse(is.na(bar_end),   fallback_year, bar_end),
+    has_period  = ifelse(is.na(has_period), FALSE, has_period),
+    smoker_type = ifelse(is.na(smoker_type), "none", smoker_type),
+    # REVERSED factor: levels = 1(top)..1001(bottom)
+    ID_for_plot = factor(ID, levels = rev(seq_len(nrow(trigeminale_daten_corrected_translated_fixed))))
+  )
+
+# Check: should be 1001 rows if you have 1001 participants
+print(dim(all_cases_for_plot))
+
+# Explicit y scale levels from REVERSED ID_for_plot
+id_levels <- levels(all_cases_for_plot$ID_for_plot)
+
+p_smoking_all <- ggplot(
+  all_cases_for_plot,
+  aes(
+    y = ID_for_plot,     # reversed factor: 1 at top, 1001 at bottom
+    color = pack_years
+  )
+) +
+  # Bars for smokers with specified periods
+  geom_errorbarh(
+    data = all_cases_for_plot %>%
+      dplyr::filter(smoker_type != "none", has_period),
+    aes(xmin = bar_start, xmax = bar_end),
+    width = 0.3,
+    linewidth = 1
+  ) +
+  # Points for smokers without specified periods
+  geom_point(
+    data = all_cases_for_plot %>%
+      dplyr::filter(smoker_type != "none", !has_period),
+    aes(x = bar_start, y = ID_for_plot),
+    size = 2,
+    shape = 16
+  ) +
+  scale_x_continuous(
+    breaks = x_breaks,
+    labels = x_labels,
+    limits = c(fallback_year - 1, actual_year + 1)
+  ) +
+  scale_y_discrete(
+    limits = id_levels,          # force exact reversed order
+    labels = function(x) x
+  ) +
+  scale_color_gradient(
+    low = "gold",
+    high = "red",
+    na.value = "grey50",
+    name = "Pack years"
+  ) +
+  labs(
+    x = "Year",
+    y = "Participant",
+    title = "Current and past smoking"
+  ) +
+  theme_minimal(base_size = 8) +
+  theme(
+    legend.position = "right",
+    axis.text.y = element_text(size = 3),
+    panel.grid.major.y = element_line(color = "grey90", linewidth = 0.3),
+    panel.grid.minor = element_blank()
+  )
+
+print(p_smoking_all)
+ggsave("p_smoking_all.svg", p_smoking_all, width = 12, height = 12)
+
+
+# ========================================================================== #
 # 8. WRITE DATA
 # ========================================================================== #
 
