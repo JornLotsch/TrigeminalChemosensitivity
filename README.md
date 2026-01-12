@@ -30,7 +30,7 @@ A comprehensive computational study investigating modulatory effects of acquired
 **Analysis Environment:**
 - R version 4.5.2 (Linux)
 - Python version 3.12.2
-- IDEs: RStudio and PyCharm Professional (version 2025.2.3, JetBrains)
+- IDEs: RStudio (Posit, version 2026.01.0 Build 392) and PyCharm Professional (JetBrains, version 2025.2.6)
 - **Operating System**: All code has been tested and validated on Linux (Ubuntu 24.04.3 LTS) only. Compatibility with macOS and Windows is not guaranteed.
 
 **Primary R Packages:**
