@@ -30,7 +30,8 @@ A comprehensive computational study investigating modulatory effects of acquired
 **Analysis Environment:**
 - R version 4.5.2 (Linux)
 - Python version 3.12.2
-- IDE: PyCharm Professional (version 2025.2.3, JetBrains)
+- IDEs: RStudio and PyCharm Professional (version 2025.2.3, JetBrains)
+- **Operating System**: All code has been tested and validated on Linux (Ubuntu 24.04.3 LTS) only. Compatibility with macOS and Windows is not guaranteed.
 
 **Primary R Packages:**
 - Data manipulation: `dplyr`, `tidyr`, `stringr`
@@ -86,7 +87,6 @@ Modulatory factors examined include:
 ├── trigeminal_measures_exploreTukey.py        # Tukey transformation exploration
 └── explore_tukey_lop.py                       # Additional transformation analysis
 
-📂 OLDstuff/                                    # Deprecated analyses
 📂 Matlab/                                      # Reserved for future use
 ```
 ```
@@ -115,11 +115,8 @@ Modulatory factors examined include:
 ├── trigeminal_measures_exploreTukey.py        # Tukey transformation exploration
 └── explore_tukey_lop.py                       # Additional transformation analysis
 
-📂 OLDstuff/                                    # Deprecated analyses
 📂 Matlab/                                      # Reserved for future use
 ```
-
-## Analysis Design
 
 ## Analysis Design
 
