@@ -1,6 +1,6 @@
 # Trigeminal Chemosensitivity Analysis
 
-A comprehensive computational study investigating modulatory effects of acquired variables (health factors, behavioral patterns, demographic characteristics) on trigeminal sensitivity phenotypes in a general population sample (n=1,001).
+Computational pipeline for analyzing trigeminal sensitivity phenotypes and their relationship to health factors, behavioral patterns, and demographics.
 
 <!-- <img src="./wip-figure.png " width="30%"> -->
 
@@ -25,326 +25,143 @@ A comprehensive computational study investigating modulatory effects of acquired
 
 ---
 
-## Computational Setup
+## Environment
 
-**Analysis Environment:**
-- R version 4.5.2 (Linux)
-- Python version 3.12.2
-- IDEs: RStudio (Posit, version 2026.01.0 Build 392) and PyCharm Professional (JetBrains, version 2025.2.6)
-- **Operating System**: All code has been tested and validated on Linux (Ubuntu 24.04.3 LTS) only. Compatibility with macOS and Windows is not guaranteed.
+**Language & Platform:**
+- R (Linux environment)
+- Python
+- Tested on Linux; compatibility with other OS not guaranteed
 
-**Primary R Packages:**
-- Data manipulation: `dplyr`, `tidyr`, `stringr`
-- Data visualization: `ggplot2`, `ggtext`
-- Temporal operations: `lubridate`
-- Statistical summaries: `psych`
-
-**Specialized Packages:**
-- Missing data imputation: `missForest`
-- Gaussian Mixture Modeling: `opGMMassessment`
+**Key R Packages:**
+- Data processing: `dplyr`, `tidyr`
+- Visualization: `ggplot2`
+- Imputation: `missForest`
 - Dimensionality reduction: `FactoMineR`, `fastICA`, `Rtsne`, `umap`
 - Clustering: `cluster`, `NbClust`
-- Statistical testing: `MASS`, `DescTools`
+- Statistical analysis: `MASS`, `psych`
 
 ## Project Overview
 
-This project investigates potential modulatory effects of health factors, behavioral patterns, and demographics (input space **X**) on trigeminal sensitivity (output space **Y**). Three complementary trigeminal sensitivity phenotypes were constructed from psychophysical measurements and self-reported sensations:
+This pipeline analyzes modulatory effects of health, behavioral, and demographic factors on trigeminal sensitivity. Three complementary phenotypes are constructed from psychophysical measurements and self-report data.
 
-1. **Y_trig1**: HighLow_AmmoLa - univariate psychophysical classification
-2. **Y_trig2**: marginal_trigeminal_sensitivity - multivariate continuous metric
-3. **Y_trig3**: trigeminal_clusters - data-driven categorical phenotype
+**Phenotypes:**
+- **Y_trig1**: Binary classification based on sensitivity threshold
+- **Y_trig2**: Continuous multivariate metric
+- **Y_trig3**: Data-driven categorical phenotype
 
-Modulatory factors examined include:
-- **Health characteristics**: Chronic diseases, ENT surgeries, facial pain, nasal breathing problems
-- **Behavioral factors**: Smoking history, pack-years, alcohol consumption
-- **Temporal effects**: COVID-19 infection history and temporal patterns
-- **Demographic factors**: Age, sex, weight, height
+**Modulatory factors examined:**
+- Health: chronic diseases, ENT surgeries, facial pain, nasal breathing
+- Behavioral: smoking, alcohol use
+- Temporal: COVID-19 infection history
+- Demographics: age, sex, anthropometric measures
 ## Repository Structure
 
 ```
 📂 R/
-├── Data Preparation & Preprocessing
-│   ├── read_data_and_basic_corrections.R      # Initial data import, validation, corrections
-│   ├── build_analysis_dataset.R               # Construction of analysis-ready dataset
-│   └── globals.R                              # Global variables and configuration
+├── Data Preparation
+│   ├── read_data_and_basic_corrections.R
+│   ├── build_analysis_dataset.R
+│   └── globals.R
 │
 ├── Exploratory & Descriptive Analysis
-│   ├── descriptive_statistics_overview.R      # Cohort characteristics and summaries
-│   ├── smoking_overview.R                     # Smoking patterns and temporal analysis
-│   ├── facial_pain_overview.R                 # Facial pain prevalence and characteristics
-│   ├── chronic_diseases_overview.R            # Chronic disease prevalence and patterns
-│   ├── covid_overview.R                       # COVID-19 infection and temporal patterns
-│   └── nasal_breathing_and_ENT_surgery_overview.R  # Nasal issues and ENT procedures
+│   ├── descriptive_statistics_overview.R
+│   ├── smoking_overview.R
+│   ├── facial_pain_overview.R
+│   ├── chronic_diseases_overview.R
+│   ├── covid_overview.R
+│   └── nasal_breathing_and_ENT_surgery_overview.R
 │
-├── Advanced Statistical Analysis
-│   ├── trigeminal_measures_distributions_correlations.R  # Phenotype construction & validation
-│   ├── ammo_distribution_analysis.R           # Distribution analysis and transformations
-│   └── ProjectionsBiomed_MainFunctions_6_1core.R  # Utilities for analysis
+├── Statistical Analysis
+│   ├── trigeminal_measures_distributions_correlations.R
+│   ├── ammo_distribution_analysis.R
+│   └── ProjectionsBiomed_MainFunctions_6_1core.R
 │
 └── TrigeminalSensitivity.Rproj
 
 📂 Python/
-├── trigeminal_measures_exploreTukey.py        # Tukey transformation exploration
-└── explore_tukey_lop.py                       # Additional transformation analysis
-
-📂 Matlab/                                      # Reserved for future use
-```
-```
-📂 R/
-├── Data Preparation & Preprocessing
-│   ├── read_data_and_basic_corrections.R      # Initial data import, validation, corrections
-│   ├── build_analysis_dataset.R               # Construction of analysis-ready dataset
-│   └── globals.R                              # Global variables and configuration
-│
-├── Exploratory & Descriptive Analysis
-│   ├── descriptive_statistics_overview.R      # Cohort characteristics and summaries
-│   ├── smoking_overview.R                     # Smoking patterns and temporal analysis
-│   ├── facial_pain_overview.R                 # Facial pain prevalence and characteristics
-│   ├── chronic_diseases_overview.R            # Chronic disease prevalence and patterns
-│   ├── covid_overview.R                       # COVID-19 infection and temporal patterns
-│   └── nasal_breathing_and_ENT_surgery_overview.R  # Nasal issues and ENT procedures
-│
-├── Advanced Statistical Analysis
-│   ├── trigeminal_measures_distributions_correlations.R  # Phenotype construction & validation
-│   ├── ammo_distribution_analysis.R           # Distribution analysis and transformations
-│   └── ProjectionsBiomed_MainFunctions_6_1core.R  # Utilities for analysis
-│
-└── TrigeminalSensitivity.Rproj
-
-📂 Python/
-├── trigeminal_measures_exploreTukey.py        # Tukey transformation exploration
-└── explore_tukey_lop.py                       # Additional transformation analysis
-
-📂 Matlab/                                      # Reserved for future use
+├── trigeminal_measures_exploreTukey.py
+└── explore_tukey_lop.py
 ```
 
 ## Analysis Design
 
-### Input and Output Spaces
+**Output (Y):** Trigeminal sensitivity phenotypes constructed from psychophysical measurements and questionnaire responses
 
-The analysis framework defines:
-
-- **Output Space (Y)**: Trigeminal sensitivity, represented through three distinct phenotypes constructed from psychophysical measurements (AmmoLa intensity, lateralization, CO₂ threshold) and self-reported trigeminal sensations (TriFunQ questionnaire items)
-
-- **Input Space (X)**: Modulatory factors comprising 247 variables across 7 categories—demographics, chronic disease history, COVID-19 exposure, smoking and alcohol use, olfactory function, nasal irritation, and odor identification performance
+**Input (X):** Modulatory factors including demographics, health history, behavioral factors, and temporal variables
 
 ---
 
 ## Construction of Trigeminal Sensitivity Phenotypes
 
-### Trigeminal Sensitivity Measurements
+### Overview
 
-The study employed three psychophysical measures of trigeminal sensitivity:
+Three phenotypes are derived from psychophysical measurements and questionnaire responses.
 
-1. **Ammonia Lateralization Intensity (AmmoLa)**: Available for all 1,001 participants
-2. **Lateralization Score**: Available in 458 participants (non-overlapping subset)
-3. **CO₂ Detection Threshold**: Available in 453 participants (non-overlapping subset)
-   - Subgroup without controlled breathing (n=177): 17.1% ceiling censoring
-   - Subgroup with breath-hold protocol (n=336): 5.4% ceiling censoring (used for analysis)
+**Data Preprocessing:** Missing values are handled via random forest imputation. Distributions are tested for normality; transformations are applied where needed.
 
-These measures were combined with 15 TriFunQ questionnaire items (0.47% missing values) assessing self-reported trigeminal sensation.
-
-### Univariate Phenotype (Y_trig1)
+### Phenotype 1: Binary Classification (Y_trig1)
 
 **[trigeminal_measures_distributions_correlations.R](R/trigeminal_measures_distributions_correlations.R)**
 
-**Definition: HighLow_AmmoLa**
+Binary classification based on sensitivity threshold. Validation includes correlation analysis, agreement testing, and group comparisons using appropriate statistical tests.
 
-- Binary classification based on AmmoLa intensity (available for all n=1,001)
-- High sensitivity: ≥90th percentile (n=100)
-- Low-to-moderate sensitivity: remainder (n=901)
+### Phenotype 2: Continuous Multivariate Metric (Y_trig2)
 
-**Validation Analyses:**
+**[trigeminal_measures_distributions_correlations.R](R/trigeminal_measures_distributions_correlations.R) & [ammo_distribution_analysis.R](R/ammo_distribution_analysis.R)**
 
-1. **Correlation Analysis**
-   - Spearman rank correlations between AmmoLa and other trigeminal measures
-   - Pearson correlations with age
-   - Kruskal-Wallis tests for biological sex associations
-
-2. **Agreement at Sensitivity Extremes**
-   - Fisher's exact tests for 2×2 contingency tables
-
-3. **Group Comparisons**
-   - Wilcoxon-Mann-Whitney U rank-sum tests
-   - Effect sizes: Cohen's d with Hedges' correction
-   - 95% bootstrap confidence intervals (1,000 iterations)
-
-### Composite Phenotypes (Y_trig2 & Y_trig3)
-
-#### Data Preprocessing
-
-**[ammo_distribution_analysis.R](R/ammo_distribution_analysis.R)**
-
-**AmmoLa Transformation:**
-- Problem: Left-skewness and ceiling effects in AmmoLa intensity ratings
-- Solution: Reflected sign-log transformation
-  $$\text{AmmoLa}_{\text{reflected,slog}} = -\text{sign}(\max(\text{AmmoLa})+1-\text{AmmoLa}) \cdot \log_{10}(|\max(\text{AmmoLa})+1-\text{AmmoLa}|+1)$$
-- Rescaling: Transformed values rescaled to [0, 3] range for comparability with TriFunQ items
-
-**Missing Data Handling:**
-- 15 TriFunQ variables: 72 missing values (0.47%) imputed using random forests (`missForest`)
-- Variables excluded: 3 onion-cutting items with >20% missing values
-
-#### Marginal Trigeminal Sensitivity (Y_trig2)
-
-**[trigeminal_measures_distributions_correlations.R](R/trigeminal_measures_distributions_correlations.R)**
-
-**Definition:**
-- Unidimensional phenotype: row means across 16 variables (15 TriFunQ + transformed AmmoLa)
-- Distribution testing: Anderson-Darling normality tests
-- Gaussian Mixture Modeling: 1-4 modes with likelihood ratio tests for model selection
-
-**Principal Component Analysis:**
-- PCA with Kaiser-Guttman criterion (eigenvalue >1) for component retention
-- Examination of variable loadings on principal components
-- Visualization of samples projected onto principal component space
-
-#### Cluster-Based Trigeminal Phenotype (Y_trig3)
-
-**Projection Methods & Clustering Evaluation:**
-
-Systematic evaluation across multiple dimensionality reduction techniques:
-- **Projection methods** (6): No projection, PCA, ICA, MDS, t-SNE, UMAP
-- **Clustering algorithms** (8): k-means, PAM, hierarchical (Ward, single, average, median, complete, centroid linkage)
-- **Cluster determination**: NbClust package (30 validity indices, majority voting)
-
-**Evaluation Approach:**
-- Selection based on highest combined ranking across 6 quality metrics
-- Quality metrics (6): Silhouette index, Dunn index, Davies-Bouldin index, Calinski-Harabasz index, DBCV index, within-cluster inertia
-
-**Cluster Comparison:**
-- Wilcoxon-Mann-Whitney U rank-sum tests for comparing trigeminal variables across clusters
-- Cohen's d effect sizes with bootstrap-derived 95% confidence intervals
-- Analysis includes questionnaire items, lateralization scores, and CO₂ thresholds
+Derived from questionnaire responses and transformed psychophysical measurements. Distribution tested via Gaussian Mixture Modeling with model selection based on likelihood ratio tests. Principal Component Analysis applied for dimension examination.
 
 ---
 
 ## Processing of Modulatory Factors
 
-### Feature Categories and Variable Construction
-
 **[read_data_and_basic_corrections.R](R/read_data_and_basic_corrections.R) & [build_analysis_dataset.R](R/build_analysis_dataset.R)**
 
-Data preprocessing pipeline:
-1. Excel data import from source file
-2. Data validation, error correction, and typographical error fixing
-3. German-to-English translation of categorical variables
-4. Temporal variable extraction from free-text responses
-5. Feature engineering and variable transformation
-6. One-hot encoding of categorical variables
+Data processing pipeline:
+1. Data import and validation
+2. Error correction and standardization
+3. Feature engineering and transformation
+4. Handling of categorical and temporal variables
 
-#### Category 1: Demographics (n=7)
-- Age, weight, height (numeric)
-- Gender: one-hot encoded (male, female, diverse, missing indicator)
+**Factor categories:**
+- Demographics (age, sex, anthropometric measures)
+- Health: chronic diseases, ENT surgeries, facial pain, nasal breathing
+- COVID-19: infection status, temporal patterns
+- Lifestyle: smoking status, pack-years, alcohol use
+- Olfactory and nasal variables
 
-#### Category 2: Disorders or Health Complaints (n=180)
-- **Chronic diseases** (one-hot encoded): Extracted from free text, standardized, translated to English, and mapped to canonical medical terminology
-- **ENT surgeries** (one-hot encoded): Extracted from free text, standardized, and categorized
-- **Facial pain**: Presence (0=no, 1=past, 2=current), frequency categories, 4 quality descriptors (pulling, stabbing, pressing, burning)
-- **Nasal breathing**: Medical consultation status, ongoing therapy status
-
-#### Category 3: COVID-19 History (n=13)
-- Infection status (binary) and infection count (1-5 episodes)
-- Olfactory function: pre-infection and immediate post-infection ratings
-- Time since infection: months for up to 3 separate episodes (longest and shortest intervals)
-- Smell reduction: binary indicators for each infection period
-
-#### Category 4: Smoking and Alcohol Use (n=9)
-- **Smoking status**: Current, former, never-smoker (derived from multiple questions)
-- **Temporal variables**: Extracted from free text → numerical formats (years/months)
-- **Pack-years**: Calculated from daily consumption × duration
-- **Cessation timing**: Years since smoking cessation (infinity for never-smokers)
-- **Alcohol consumption**: Ordinal variable
-
-#### Category 6: Rated Olfactory Function (n=12)
-- Self-rated current smell ability (0-100% continuous)
-- Problem onset: ordinal (gradual, sudden, uncertain)
-- Temporal change: ordinal (no change, improved, worsened)
-- Affected modalities: one-hot encoded (smell only, taste only, both, unknown)
-
-#### Category 7: Nasal Irritation and Airflow (n=4)
-- Sensitivity to stinging/burning stimuli (1-4 scale)
-- Self-rated airflow: combined nostrils, right nostril, left nostril (0-100 scale)
-
-#### Category 8: Psychophysical Measurements (n=1)
-- Odor identification test: Score range 0-3 correct
-
-### Missing Data Handling
-
-**Exclusion Threshold:**
-- Variables with >20% missing: excluded (7 variables removed)
-  - Migraine-related variables (2): frequency per month, changes over 10 years
-  - Onion-cutting variables (3): for trigeminal assessment
-  - Psychophysical measures (2): Lateralization, CO₂ threshold
-
-**Low-Level Missing Data:**
-- After exclusion: 293 missing values across 240 variables (0.12% of total)
-- Imputation method: Random forest-based `missForest` algorithm
-
-**Phenotype-Specific Data Gaps:**
-- Lateralization and CO₂ thresholds: subset-specific analyses only (non-overlapping subgroups)
+**Missing data:** Random forest imputation for low-level missing data; variables with >20% missing excluded.
 
 ## Statistical Methods
 
-**Univariate Statistical Tests:**
-- Spearman rank correlations (monotonic relationships)
-- Pearson correlations (age associations)
-- Kruskal-Wallis tests (biological sex associations, eta-squared effect sizes)
-- Fisher's exact tests (2×2 contingency tables, sensitivity concordance)
-- Wilcoxon-Mann-Whitney U rank-sum tests (distribution comparisons)
-- Effect sizes: Cohen's d with Hedges' correction, 95% bootstrap confidence intervals (1,000 iterations)
-- Anderson-Darling normality tests
+**Univariate Testing:**
+- Correlation: Spearman, Pearson
+- Group comparison: Kruskal-Wallis, Wilcoxon-Mann-Whitney U, Fisher's exact
+- Effect sizes: Cohen's d with bootstrap confidence intervals
 
-**Dimensionality Reduction Methods:**
-- **Principal Component Analysis (PCA)**: Kaiser-Guttman criterion (eigenvalue > 1) for component retention
-- **Independent Component Analysis (ICA)**: Implementation via `fastICA`
-- **Multidimensional Scaling (MDS)**: Via `MASS` package
-- **t-Distributed Stochastic Neighbor Embedding (t-SNE)**: Via `Rtsne`
-- **Uniform Manifold Approximation and Projection (UMAP)**: Via `umap`
+**Dimensionality Reduction:**
+- PCA, ICA, MDS, t-SNE, UMAP
 
-**Clustering Algorithms:**
-- **Partitioning methods**: k-means, Partitioning Around Medoids (PAM)
-- **Hierarchical methods**: Ward linkage, single, average, median, complete, and centroid linkage
-- **Cluster number determination**: NbClust package (30 validity indices, majority voting)
-- **Cluster quality metrics**: Silhouette index, Dunn index, Davies-Bouldin index, Calinski-Harabasz index, DBCV index, within-cluster inertia
+**Clustering:**
+- Partitioning: k-means, PAM
+- Hierarchical: Ward, single, average, median, complete, centroid linkage
+- Validation: NbClust (30 validity indices)
 
 **Distribution Modeling:**
-- **Gaussian Mixture Modeling**: 1-4 modes, evolutionary algorithm optimization via `opGMMassessment`
-- **Model selection**: Likelihood ratio tests for comparing models
-- **Transformation assessment**: Reflected sign-log, logarithmic variants
-
-**Exploratory Analyses:**
-
-**[descriptive_statistics_overview.R](R/descriptive_statistics_overview.R)**
-- Cohort summary statistics and prevalence distributions
-
-**[smoking_overview.R](R/smoking_overview.R)**
-- Temporal analysis of smoking periods
-- Pack-year calculations and cessation timing
-
-**[facial_pain_overview.R](R/facial_pain_overview.R)**
-- Pain prevalence and characteristic distributions
-
-**[chronic_diseases_overview.R](R/chronic_diseases_overview.R)**
-- Chronic disease prevalence and patterns
-
-**[covid_overview.R](R/covid_overview.R)**
-- COVID-19 exposure patterns and temporal characteristics
-
-**[nasal_breathing_and_ENT_surgery_overview.R](R/nasal_breathing_and_ENT_surgery_overview.R)**
-- Nasal and ENT procedure analysis
+- Gaussian Mixture Modeling (1-4 modes)
+- Likelihood ratio model selection
 
 ---
 
 ## Usage
 
-**Data Preparation** (required first):
+**Data Preparation (required first):**
 ```r
 source("R/read_data_and_basic_corrections.R")
 source("R/build_analysis_dataset.R")
 ```
 
-**Exploratory Analyses** (can be run independently):
+**Exploratory Analyses (independent):**
 ```r
 source("R/descriptive_statistics_overview.R")
 source("R/smoking_overview.R")
@@ -354,7 +171,7 @@ source("R/covid_overview.R")
 source("R/nasal_breathing_and_ENT_surgery_overview.R")
 ```
 
-**Advanced Statistical Analysis**:
+**Statistical Analysis:**
 ```r
 source("R/trigeminal_measures_distributions_correlations.R")
 source("R/ammo_distribution_analysis.R")
@@ -362,12 +179,6 @@ source("R/ammo_distribution_analysis.R")
 
 ---
 
-## Data Privacy and Compliance
-
-All data handling and analysis procedures adhere to applicable data protection regulations, including GDPR (General Data Protection Regulation) and institutional research ethics guidelines. Data security measures are implemented throughout the preprocessing and analysis pipeline to ensure participant confidentiality and appropriate handling of sensitive health information.
-
----
-
 ## License
 
-This project is part of ongoing research into trigeminal chemosensitivity and related medical factors. The analysis code and documentation are available at: https://github.com/JornLotsch/TrigeminalChemosensitivity
+Analysis code and documentation available at: https://github.com/JornLotsch/TrigeminalChemosensitivity
