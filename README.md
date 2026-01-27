@@ -64,7 +64,7 @@ Computational pipeline for analyzing trigeminal sensitivity measures and their p
 
 📂 Python/
 ├── trigeminal_measures_exploreTukey.py
-└── explore_tukey_lop.py
+└── [explore_tukey_lop.py](https://github.com/JornLotsch/PythonDataExploration/blob/main/explore_tukey_lop.py)
 ```
 
 ---
@@ -222,6 +222,6 @@ source("R/nasal_breathing_and_ENT_surgery_overview.R")  # Nasal factors
 ## Copyright
 
 © 2025 Computational Analysis  
-Code and documentation: https://github.com/JornLotsch/TrigeminalChemosensitivity
+[Code and documentation](https://github.com/JornLotsch/TrigeminalChemosensitivity)
 
 *This repository contains analysis code for scientific research. Use restricted to authorized collaborators and publication in peer-reviewed venues.*
