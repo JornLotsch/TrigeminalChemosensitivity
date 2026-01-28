@@ -488,10 +488,17 @@ cat("Analysis complete!\n")
 cat("\n=== Creating Combined Projection Plots ===\n")
 
 # Combine all projection plots into single figure
+
+# remove plots with projection = "none" (makes no sense to plot variables 1 and 2)
+
+no_none_projection_plots <- as.numeric(strsplit(paste(setdiff(1:length(names(projectionsAndPlots_TriFunQ$projections_plots$variables_nasal_chemosensory_perception_for_clustering_imputed_renamed_prepared))
+                                    , grep("none", names(projectionsAndPlots_TriFunQ$projections_plots$variables_nasal_chemosensory_perception_for_clustering_imputed_renamed_prepared))
+), collapse = ","), ",")[[1]])
+
 combined_plots <- combine_all_plots(
   datasets = DatasetNames,
-  projection_plots = projectionsAndPlots_TriFunQ$projections_plots,
-  projection_methods = projection_methods,
+  projection_plots = projectionsAndPlots_TriFunQ$projections_plots$variables_nasal_chemosensory_perception_for_clustering_imputed_renamed_prepared[no_none_projection_plots],
+  projection_methods = projection_methods[projection_methods != "none"],
   clustering_methods = clustering_methods,
   cluster_number_methods = cluster_number_methods
 )
@@ -503,8 +510,8 @@ original_plots_updated <- update_plot_titles(original_plots, title_size = 12, wr
 # Recombine with updated titles
 combined_plots_fixed <- combine_all_plots(
   datasets = DatasetNames,
-  projection_plots = original_plots_updated,
-  projection_methods = projection_methods,
+  projection_plots = original_plots_updated$variables_nasal_chemosensory_perception_for_clustering_imputed_renamed_prepared[no_none_projection_plots],
+  projection_methods = projection_methods[projection_methods != "none"],
   clustering_methods = clustering_methods,
   cluster_number_methods = cluster_number_methods
 )
@@ -532,7 +539,7 @@ ggsave(
                     cluster_number_methods, "_clusters_", DatasetNames[1], ".svg"),
   plot = combined_plots_fixed_title,
   width = 4 * (length(clustering_methods) + length(cluster_number_methods)),
-  height = 4 * length(projection_methods),
+  height = 4.5 * length(projection_methods[projection_methods != "none"]),
   limitsize = FALSE
 )
 ggsave(
@@ -540,7 +547,7 @@ ggsave(
                     cluster_number_methods, "_clusters_", DatasetNames[1], ".png"),
   plot = combined_plots_fixed_title,
   width = 4 * (length(clustering_methods) + length(cluster_number_methods)),
-  height = 4 * length(projection_methods),
+  height = 4.5 * length(projection_methods[projection_methods != "none"]),
   limitsize = FALSE,
   dpi = 300
 )

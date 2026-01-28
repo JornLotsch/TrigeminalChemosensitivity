@@ -2492,7 +2492,9 @@ combine_all_plots <- function(datasets, projection_plots, projection_methods, cl
       fig <- cowplot::plot_grid(plotlist = all_plots[start_idx:end_idx], ncol = columns, nrow = rows, labels = "AUTO")
     } else {
       fig <- cowplot::plot_grid(plotlist = all_plots[start_idx:end_idx], ncol = columns, nrow = rows,
-                                 labels = paste0(rep(LETTERS[1:rows], each = ncol), rep(1:columns, rows)))
+                                 labels =
+                                  paste0(rep(LETTERS[1:rows], each = columns), rep(1:columns, rows))
+                                )
     }
     return(fig)
   }

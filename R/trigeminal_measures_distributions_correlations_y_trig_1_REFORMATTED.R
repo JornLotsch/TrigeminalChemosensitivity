@@ -41,6 +41,7 @@ library(ggplotify) # Convert base plots to ggplot
 library(ggpmisc) # Additional ggplot2 functionality
 library(ggpubr) # Publication-ready plots
 library(ggthemes) # Extra themes for ggplot2
+library(ggrepel) # For text arrangement in plots
 library(grid) # Grid graphics
 library(gridExtra) # Arrange multiple grid-based plots
 library(Hmisc) # Statistical tools
@@ -58,6 +59,7 @@ library(stringr) # String manipulation
 library(tidyr) # Data tidying
 library(vcd) # Categorical data visualization
 library(viridis) # Color scales for plots
+library(stringr) # For strin manipulation
 
 source("globals.R")
 
@@ -1954,14 +1956,49 @@ pScree <-
 # PCA FACTOR PLOT
 # ========================================================================== #
 
+# 1. Extract loadings and compute contribution (squared loadings on Dim1 + Dim2)
+loadings <- res.pca_trigeminal_clustered_data_biplot$loadings
+var.coord <- as.data.frame(loadings[, 1:2])
+names(var.coord) <- c("Dim1", "Dim2")
+
+# contribution per variable (same as fviz_pca_var uses internally)
+var.contrib <- rowSums(loadings[, 1:2]^2)
+var.coord$contrib <- var.contrib
+
+# 2. Wrap long labels
+long_names <- rownames(loadings)
+var.coord$label <- str_wrap(long_names, width = 22)
+
+# 3. Build the biplot from scratch (arrows + labels, same gradient)
 pBiplot <-
-  factoextra::fviz_pca_var(res.pca_trigeminal_clustered_data_biplot,
-                           col.var = "contrib", gradient.cols = c("cornsilk3", "cornsilk4", "grey33"), #pal2(200)[150:200],
-                           repel = TRUE) +
+  ggplot(var.coord, aes(Dim1, Dim2, color = contrib)) +
+  # Arrows
+  geom_segment(
+    aes(x = 0, y = 0, xend = Dim1, yend = Dim2),
+    arrow = arrow(length = unit(0.2, "cm")),
+    alpha = 0.7
+  ) +
+  # Labels colored by the same contribution
+  geom_text_repel(
+    aes(label = label),
+    segment.alpha = 0.5,
+    size = 3,
+    direction = "both",
+    max.iter = 5000,
+    nudge_y = 0.05
+  ) +
+  # Use exactly your gradient
+  scale_color_gradientn(
+    colours = c("grey20", "sienna3", "red"),
+    name = "Contribution"
+  ) +
   theme_plot() +
-  theme(axis.text.x = element_text(angle = 0, hjust = 1),
-        legend.position.inside = TRUE, legend.position = c(.2, .2), fill = "Contribution") +
-  labs(title = paste0("PCA biplot"))
+  theme(
+    axis.text.x = element_text(angle = 0, hjust = 1),
+    legend.position.inside = TRUE,
+    legend.position = c(.2, .2)
+  ) +
+  labs(title = "PCA biplot")
 
 # ========================================================================== #
 # PCA VARIABLE CONTRIBUTION PLOTS
