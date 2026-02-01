@@ -59,6 +59,7 @@ library(ggplotify)      # Convert base plots to ggplot
 library(ggpmisc)        # Additional ggplot2 functionality
 library(ggthemes)       # Extra themes
 library(cowplot)        # Plot composition
+library(patchwork)        # Plot composition
 library(grid)           # Grid graphics
 library(gridExtra)      # Multiple grid plots
 library(ComplexHeatmap) # Advanced heatmaps
@@ -1507,7 +1508,7 @@ if (k_clusters == 2) {
   plot(results_effect_valid$r ~ results_effect_training$r)
   Tau_clusters <- cor.test(x = results_effect_training$r,
                            y = results_effect_valid$r, method = "kendall")
-  df_effsize <- data.frame(Training = results_effect_training$r,
+  df_effsize <- cbind.data.frame(Training = results_effect_training$r,
                           Validation = results_effect_valid$r)
 } else {
   # Eta-squared
@@ -1517,13 +1518,18 @@ if (k_clusters == 2) {
   df_effsize <- data.frame(Training = results_effect_training$eta2,
                           Validation = results_effect_valid$eta2)
 }
+df_effsize$mean_effect <- rowMeans(df_effsize)
+df_effsize$variable <- str_wrap(results_effect_training$variable, width = 22)
+
 print(Tau_clusters)
 
 # Create correlation plot
-p_cor_Effsizes_tau <- ggplot(df_effsize, aes(x = Training, y = Validation)) +
-  geom_point() +
-  labs(title = "Correlation of effect sizes per variable") +
+p_cor_Effsizes_tau <-
+  ggplot(df_effsize, aes(x = Training, y = Validation, color = as.factor(mean_effect))) +
+  geom_point(size = 4, show.legend = FALSE) +
+  ggrepel::geom_text_repel(aes(x = Training, y = Validation, label=variable), force = TRUE, force_pull = TRUE, size = 1.5, show.legend = FALSE) +
   stat_cor(method = "kendall", label.x = .1, label.y = .6) +
+  guides(color = "none") +
   theme_plot()
 
 # ============================================================================ #
