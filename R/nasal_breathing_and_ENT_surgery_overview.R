@@ -716,115 +716,7 @@ dplyr::filter(!is.na(desc) & desc != "")
 # 8. GERMAN TO ENGLISH TRANSLATION MAP
 # ========================================================================== #
 
-# Get condensed_ENT_dictionary from globals.R
-
-# Translation dictionary for ENT surgical procedures
-# Grouped by procedure type and normalized to consolidate variants
-# breathing_and_ENT_surgery_therapy_dict <- c(
-#   # Adenoid procedures - consolidated variants
-#   "Adenotomie" = "Adenotomy",
-#   "Adenotomie Kindesalter" = "Adenotomy",
-#   "Kindesalter Adenotomie" = "Adenotomy",
-#   "Adentomie" = "Adenotomy",  # Typo correction
-#
-#   # Nasal trauma/fractures
-#   "Nasenfraktur" = "Nasal fracture",
-#   "Nasen # OP" = "Nasal fracture surgery",
-#
-#   # Tonsil procedures - distinguished by type (full vs partial removal)
-#   "Mandeln" = "Tonsillectomy",            # Full removal
-#   "Mandeln OP" = "Tonsillectomy",
-#   "Mandel OP" = "Tonsillectomy",
-#   "Mandel Op" = "Tonsillectomy",
-#   "Mandel-OP" = "Tonsillectomy",
-#   "Kindesalter Mandeln" = "Tonsillectomy",
-#   "Tonsillektomie" = "Tonsillectomy",     # Explicit full removal
-#
-#   "Tonsillotomie" = "Tonsillotomy",       # Partial removal
-#   "Tonsillotomie Kindheit" = "Tonsillotomy",
-#   "Kindesalter Tonsillotomie" = "Tonsillotomy",
-#   "Tonsillotomie Kindesalter" = "Tonsillotomy",
-#   "Tonsillotomie jugend" = "Tonsillotomy",
-#   "er Tonsillotomie" = "Tonsillotomy",
-#
-#   # Nasal polyps - grouped and normalized
-#   "Polypen" = "Nasal polyps surgery",
-#   "Kleinkind Polypen" = "Nasal polyps surgery",
-#   "Kindheit Polypen" = "Nasal polyps surgery",
-#   "Kindesalter Polypen" = "Nasal polyps surgery",
-#   "CRS Polypenentfernung 2x" = "Nasal polyps surgery",
-#
-#   # Nasal growth/sinus surgeries
-#   "Wucherungen Nase" = "Nasal growth surgery",
-#   "NNH" = "Paranasal sinus surgery",
-#   "NNH Op" = "Paranasal sinus surgery",
-#   "NNH links" = "Left paranasal sinus surgery",
-#
-#   # Nasal septum surgeries and corrections - grouped and normalized
-#   "NSW" = "Nasal septum surgery",
-#   "NSW OP" = "Nasal septum surgery",
-#   "Nasenscheidewand" = "Nasal septum surgery",
-#   "Nasenscheidewand OP" = "Nasal septum surgery",
-#   "Begradigung Nasenscheidewand" = "Nasal septum correction",
-#   "Septum OP" = "Nasal septum surgery",
-#   "Septumkorrektur" = "Nasal septum correction",
-#   "Septumdeviation" = "Septal deviation correction",
-#
-#   # Fenestration and Caldwell-Luc procedures
-#   "Fensterung" = "Fenestration",
-#   "Fensterung Kieferhöhle" = "Caldwell-Luc procedure",
-#   "Fensterung Kieferhöhle li." = "Left Caldwell-Luc procedure",
-#
-#   # Ear surgeries
-#   "Knorpelplastik Ohr" = "Cartilage plasty (ear)",
-#   "Ohr li. Implantat" = "Left ear implant",
-#   "Ohr anlegen" = "Otoplasty",
-#   "Otoplastik" = "Otoplasty",
-#   "Austausch Hämmerchen Ohr" = "Malleus replacement (middle ear)",
-#
-#   # Tympanic membrane surgeries
-#   "Trommelfell" = "Tympanic membrane surgery",
-#   "Trommelfell 2x" = "Tympanic membrane surgery",
-#   "Trommelfell-OP" = "Tympanic membrane surgery",
-#   "Trommelfellimplantat" = "Tympanic membrane implant",
-#   "Trommelfellverschluss" = "Tympanic membrane closure",
-#   "Trommelfellschnitt" = "Myringotomy",
-#
-#   "Knalltrauma" = "Acoustic trauma",
-#
-#   # Vocal cord surgeries
-#   "Stimmband OP" = "Vocal cord surgery",
-#   "Stimmknötchen" = "Vocal cord nodules surgery",
-#
-#   # Oncological procedures
-#   "Mundbodenkarzinom" = "Mouth floor carcinoma surgery",
-#   "Parotisentfernung" = "Parotidectomy",
-#   "Karzinom Hals" = "Neck carcinoma surgery",
-#   "Medulläres Schildrüsenkarzinom" = "Medullary thyroid carcinoma surgery",
-#   "Karzinom Rachen li." = "Left pharyngeal carcinoma surgery",
-#   "OP Halsbereich" = "Neck surgery",
-#   "Abszess Rachen" = "Pharyngeal abscess surgery",
-#   "Trauma Hals" = "Neck trauma surgery",
-#
-#   # Miscellaneous surgical procedures - grouped consistently
-#   "Begradigung Nase" = "Nasal straightening surgery",
-#   "Schilddrüse" = "Thyroid gland surgery",
-#   "Thyreodektomie" = "Thyroidectomy",
-#   "Kiefernzyste" = "Jaw cyst removal",
-#   "OP Polypen Stirnhöhle" = "Frontal sinus polyp surgery",
-#
-#   # Turbinate reduction procedures - harmonized treatments
-#   "Nasenmuscheln Verkleinerung" = "Inferior turbinate reduction",
-#   "Reduktion Nasenmuscheln" = "Inferior turbinate reduction",
-#   "Verkleinerung Nasenmuscheln" = "Inferior turbinate reduction",
-#   "Laserung Nasenmuscheln" = "Inferior turbinate laser therapy",
-#   "Verödung Nasenmuschel" = "Inferior turbinate cauterization",
-#   "Verödung Nasenmuscheln" = "Inferior turbinate cauterization",
-#   "Stromwellentherapie zum Abschwellen der Nasenmuscheln" = "Inferior turbinate radiofrequency therapy",
-#
-#   # Placeholder/invalid entries
-#   "j" = "Unspecified"
-# )
+# ... Get condensed_ENT_dictionary from globals.R
 
 # ========================================================================== #
 # 9. TRANSLATE DESCRIPTIONS TO ENGLISH
@@ -841,7 +733,7 @@ ENT_surgeries_long_df_fixed <- ENT_surgeries_long_df_fixed %>%
 # 10. ADD MISSING SURGERIES FOR NASAL BREATHING PROBLEMS
 # ========================================================================== #
 
-# Your nasal breathing surgical procedures list
+# Nasal breathing surgical procedures list
 nasal_breathing_surgical_procedures <- c(
   "Adenotomy",
   "Nasal polyps surgery",
@@ -963,7 +855,7 @@ count_df <- ENT_surgeries_long_df_fixed_completed %>%
   )
 
 # ========================================================================== #
-# 12. OPTIONAL: REORDER BY PROCEDURE FREQUENCY
+# 12. REORDER BY PROCEDURE FREQUENCY
 # ========================================================================== #
 
 if (order_plot) {
@@ -1030,7 +922,7 @@ scale_y_continuous(
 labs(
     x = "Disease",
     y = "Year",
-    title = "ENT surgeries over years"
+    title = "ENT treatments over years"
   ) +
 # Minimal theme
 theme_minimal(base_size = 8) +

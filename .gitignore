@@ -19,4 +19,14 @@ __pycache__/
 OLDstuff/
 *tmp*
 *Tmp*
+*.html
+*.pdf
+*.docx
+*.xlsx
+*.pptx
+*.zip
+*.tar.gz
+*.log
+*.bak
+*.swp
 

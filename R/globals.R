@@ -64,6 +64,17 @@ scale01minmax <- function(x, minX, maxX) {
   (x - minX) / (maxX - minX)
 }
 
+
+#' Scale data to percentage range [0, 100]
+#'
+#' @param data Numeric vector or matrix to scale.
+#' @return Scaled data where each column has minimum 0 and maximum 100.
+#' @details Uses \code{toRange} internally.
+to_percent <- function(data) {
+  toRange(data, 0, 100)
+}
+
+
 # ======================== #
 # Global variables
 # ======================== #
@@ -264,15 +275,16 @@ variables_by_categories <- list(
 
 
 # Translation list ENT surgeries and nasal breathing problems
+# Translation list ENT surgeries and nasal breathing problems
 condensed_ENT_dictionary <- c(
 
-# Adenoid procedures
+  # Adenoid procedures
   "Adenotomie" = "Adenotomy",
   "Adenotomie Kindesalter" = "Adenotomy",
   "Kindesalter Adenotomie" = "Adenotomy",
   "Adentomie" = "Adenotomy",
 
-# Tonsil procedures
+  # Tonsil procedures
   "Mandeln" = "Tonsillectomy",
   "Mandeln OP" = "Tonsillectomy",
   "Mandel OP" = "Tonsillectomy",
@@ -281,7 +293,7 @@ condensed_ENT_dictionary <- c(
   "Kindesalter Mandeln" = "Tonsillectomy",
   "Tonsillektomie" = "Tonsillectomy",
 
-# Partial tonsil removal
+  # Partial tonsil removal
   "Tonsillotomie" = "Tonsillotomy",
   "Tonsillotomie Kindheit" = "Tonsillotomy",
   "Kindesalter Tonsillotomie" = "Tonsillotomy",
@@ -289,39 +301,39 @@ condensed_ENT_dictionary <- c(
   "Tonsillotomie jugend" = "Tonsillotomy",
   "er Tonsillotomie" = "Tonsillotomy",
 
-# Polyp surgery (nasal)
-  "Polypen" = "Nasal polyps surgery",
+  # Polyp surgery (nasal)
+  "Polypen" = "Sinus surgery",
   "Kleinkind Polypen" = "Adenoidectomy",
   "Kindheit Polypen" = "Adenoidectomy",
   "Kindesalter Polypen" = "Adenoidectomy",
-  "CRS Polypenentfernung 2x" = "Nasal polyps surgery",
-  "Polypen-Op" = "Nasal polyps surgery",
+  "CRS Polypenentfernung 2x" = "Sinus surgery",
+  "Polypen-Op" = "Sinus surgery",
   "OP Polypen Stirnhöhle" = "Sinus surgery",
 
-# Nasal/sinus surgeries and trauma
+  # Nasal/sinus surgeries and trauma
   "Nasenfraktur" = "Nasal fracture surgery",
   "Nasen # OP" = "Nasal fracture surgery",
-  "Wucherungen Nase" = "Nasal polyps surgery",
+  "Wucherungen Nase" = "Sinus surgery",
   "NNH" = "Sinus surgery",
   "NNH Op" = "Sinus surgery",
   "NNH links" = "Sinus surgery",
 
-# Nasal septum procedures
-  "NSW" = "Nasal septoplasty",
-  "NSW OP" = "Nasal septoplasty",
-  "OP NSW" = "Nasal septoplasty",
-  "OP Nasenscheidewand" = "Nasal septoplasty",
-  "Nasenscheidewand" = "Nasal septoplasty",
-  "Nasenscheidewand OP" = "Nasal septoplasty",
-  "Begradigung Nasenscheidewand" = "Nasal septoplasty",
-  "Begradigung NSW" = "Nasal septoplasty",
-  "Septum OP" = "Nasal septoplasty",
-  "Septumkorrektur" = "Nasal septoplasty",
-  "Septumplastik" = "Nasal septoplasty",
-  "Septumplastik li." = "Nasal septoplasty",
-  "Septumdeviation" = "Nasal septoplasty",
+  # Nasal septum procedures
+  "NSW" = "septoplasty",
+  "NSW OP" = "septoplasty",
+  "OP NSW" = "septoplasty",
+  "OP Nasenscheidewand" = "septoplasty",
+  "Nasenscheidewand" = "septoplasty",
+  "Nasenscheidewand OP" = "septoplasty",
+  "Begradigung Nasenscheidewand" = "septoplasty",
+  "Begradigung NSW" = "septoplasty",
+  "Septum OP" = "septoplasty",
+  "Septumkorrektur" = "septoplasty",
+  "Septumplastik" = "septoplasty",
+  "Septumplastik li." = "septoplasty",
+  "Septumdeviation" = "septoplasty",
 
-# Turbinate procedures
+  # Turbinate procedures
   "Nasenmuscheln Verkleinerung" = "turbinate surgery",
   "Reduktion Nasenmuscheln" = "turbinate surgery",
   "Verkleinerung Nasenmuscheln" = "turbinate surgery",
@@ -331,21 +343,21 @@ condensed_ENT_dictionary <- c(
   "Laserung Nasenmuscheln" = "turbinate surgery",
   "Verödung Nasenmuschel" = "turbinate surgery",
   "Verödung Nasenmuscheln" = "turbinate surgery",
-  "Verödung" = "Nasal mucosa surgery",
+  "Verödung" = "turbinoplasty",
   "Stromwellentherapie" = "Radio wave therapy",
   "Stromwellentherapie zum Abschwellen der Nasenmuscheln" = "Radio wave therapy",
 
-# Nose correction / reconstruction
-  "Begradigung Nase" = "Nasal septoplasty",
+  # Nose correction / reconstruction
+  "Begradigung Nase" = "septoplasty",
 
-# Ear surgeries
+  # Ear surgeries
   "Ohr anlegen" = "Otoplasty",
   "Otoplastik" = "Otoplasty",
   "Ohr li. Implantat" = "Ear implant",
   "Knorpelplastik Ohr" = "Otoplasty",
   "Austausch Hämmerchen Ohr" = "Malleus replacement (middle ear)",
 
-# Tympanic membrane surgeries
+  # Tympanic membrane surgeries
   "Trommelfell" = "Tympanic membrane surgery",
   "Trommelfell 2x" = "Tympanic membrane surgery",
   "Trommelfell-OP" = "Tympanic membrane surgery",
@@ -353,14 +365,14 @@ condensed_ENT_dictionary <- c(
   "Trommelfellverschluss" = "Tympanic membrane surgery",
   "Trommelfellschnitt" = "Tympanic membrane surgery",
 
-# Ear trauma
+  # Ear trauma
   "Knalltrauma" = "Acoustic trauma",
 
-# Vocal cord / larynx
+  # Vocal cord / larynx
   "Stimmband OP" = "Vocal cord surgery",
   "Stimmknötchen" = "Vocal cord surgery",
 
-# Oncological surgeries
+  # Oncological surgeries
   "Mundbodenkarzinom" = "Oral carcinoma surgery",
   "Parotisentfernung" = "Parotidectomy",
   "Karzinom Hals" = "Neck carcinoma surgery",
@@ -370,22 +382,22 @@ condensed_ENT_dictionary <- c(
   "Abszess Rachen" = "Pharyngeal abscess surgery",
   "Trauma Hals" = "Neck trauma surgery",
 
-# Sinus and jaw procedures
+  # Sinus and jaw procedures
   "Fensterung" = "Fenestration",
   "Fensterung Kieferhöhle" = "Caldwell-Luc procedure",
   "Fensterung Kieferhöhle li." = "Caldwell-Luc procedure",
   "Kiefernzyste" = "Jaw cyst removal",
 
-# Thyroid procedures
+  # Thyroid procedures
   "Schilddrüse" = "Thyroid surgery",
   "Thyreodektomie" = "Thyroid surgery",
 
-# General surgeries
+  # General surgeries
   "OP" = "Operation",
   "Op geplant" = "Operation planned",
   "Trauma Hals" = "Neck trauma surgery",
 
-# Medications and therapies
+  # Medications and therapies
   "Antibiotika" = "Antibiotics",
   "AB" = "Antibiotics",
   "Cortisonspray" = "Cortisone spray",
@@ -397,51 +409,52 @@ condensed_ENT_dictionary <- c(
   "Allergie Nasenspray Mometa" = "Cortisone spray",
   "Mometason" = "Cortisone spray",
 
-# Immunotherapy or allergy treatments
+  # Immunotherapy or allergy treatments
   "Desensibilisierung" = "Hyposensitization",
   "Hyposensibilisierung" = "Hyposensitization",
   "Hyposensibilisierung, NT, Tabletten" = "Hyposensitization, nasal therapy, tablets",
   "Antiallergika" = "Antiallergics",
   "Cetirizin" = "Antiallergics",
 
-# Respiratory therapies
+  # Respiratory therapies
   "Atemgerät Schlaf" = "Obstructive Sleep Apnea Syndrome",
   "Asthmadiagnostik" = "Asthma diagnostics",
   "Bedarfsspray Asthma" = "Asthma rescue spray",
   "Corticoidinhalation" = "Corticoid inhalation",
 
-# Nasal remedies
+  # Nasal remedies
   "Nasenspray" = "Cortisone spray",
   "Nasensalbe" = "Ointment",
   "Meersalzinhalation" = "Sea salt inhalation",
 
-# Miscellaneous
+  # Miscellaneous
   "Regelmäßige Untersuchungen" = "Regular checkups",
-  "Begradigung NSW" = "Nasal septal surgery",
+  "Begradigung NSW" = "septoplasty",
   "Salbe" = "Ointment",
   "Creme" = "Ointment",
   "Doprident" = "Doprident (medication)",
-  "Fluimveil" = "acetylcysteine",
+  "Fluimveil" = "Acetylcysteine",
   "Rotlichthterapie" = "Red light therapy",
   "Akupunktur" = "Acupuncture",
   "Stirnhöhlenvereiderung?" = "Sinusitis",
   "Pansinusitis" = "Sinusitis",
   "Hals" = "Neck surgery",
-  "Verödung Nasenscheidewand" = "Nasal septal surgery",
+  "Verödung Nasenscheidewand" = "septoplasty",
   "Erweiterung Durchgänge NNH" = "Sinus surgery",
   "Verödung Nase" = "Nasal mucosa surgery",
   "Paukenröhrchen" = "Tympanostomy tube insertion",
   "Paukenröhrchen OP" = "Tympanostomy tube insertion",
   "Knochewnimplantat (Mittelohrschwerhörigkeit)" = "Middle ear surgery",
-  "NSW Fensterung" = "Nasal septal surgery",
+  "NSW Fensterung" = "septoplasty",
   "Siebbeinhöhle" = "Sinus surgery",
   "Abtragung Nasenschleimhaut" = "Nasal mucosa surgery",
-  "Septumperforation" = "Nasal septal surgery",
+  "Septumperforation" = "septoplasty",
 
-# Special cases
+  # Special cases
   "j" = "Unspecified",
   "n" = "No therapy"
 )
+
 
 
 

@@ -32,7 +32,7 @@ REQUIRED_PACKAGES <- c(
   "fastICA", "MASS", "Rtsne", "RDRToolbox", "mixOmics",
   "umap", "uwot", "caret", "pracma", "combinat", "NbClust", "parallel",
   "dplyr", "ape", "combinat", "NMF", "RANN", "pls", "Matrix",
-  "twosamples", "car", "stringr"
+  "twosamples", "car", "stringr", "EDOtrans"
 )
 
 ############### Main function ###############
@@ -46,29 +46,30 @@ load_required_packages <- function(packages) {
 
 # Function to perform analysis
 perform_analysis <- function(datasets,
-                              projection_methods = "PCA",
-                              clustering_methods = "none",
-                              cluster_number_methods = "orig",
-                              selected_cluster_metrics = c("cluster_accuracy", "Silhouette_index", "Dunn_index",
-                                                            "Rand_index", "DaviesBouldin_index", "dbcv_index",
-                                                            "CalinskiHarabasz_index", "inertia", "adjusted_mutual_information"),
-                              distance_metric = "euclidean",
-                              highlight_best_clustering = FALSE,
-                              method_for_hcpc = "ward",
-                              label_points = TRUE,
-                              highlight_misclassified = FALSE,
-                              points_colored_for = "Target",
-                              cells_colored_for = "Cluster",
-                              palette_target = NULL,
-                              palette_cluster = NULL,
-                              seed = 42,
-                              jitter_one_dimensional_projections = TRUE,
-                              nProc = 12,
-                              max_clusters = 5,
-                              scaleX = TRUE,
-                              remove_colinear_vars = FALSE,
-                              correlation_threshold_for_colinearity = 0.9,
-                              vif_threshold_for_colinearity = 10) {
+                             projection_methods = "PCA",
+                             clustering_methods = "none",
+                             cluster_number_methods = "orig",
+                             selected_cluster_metrics = c("cluster_accuracy", "Silhouette_index", "Dunn_index",
+                                                          "Rand_index", "DaviesBouldin_index", "dbcv_index",
+                                                          "CalinskiHarabasz_index", "inertia", "adjusted_mutual_information"),
+                             distance_metric = "euclidean",
+                             highlight_best_clustering = FALSE,
+                             method_for_hcpc = "ward",
+                             label_points = TRUE,
+                             highlight_misclassified = FALSE,
+                             points_colored_for = "Target",
+                             cells_colored_for = "Cluster",
+                             palette_target = NULL,
+                             palette_cluster = NULL,
+                             seed = 42,
+                             jitter_one_dimensional_projections = TRUE,
+                             nProc = 12,
+                             max_clusters = 5,
+                             scaleX = TRUE,
+                             doEDOtrans = FALSE,
+                             remove_colinear_vars = FALSE,
+                             correlation_threshold_for_colinearity = 0.9,
+                             vif_threshold_for_colinearity = 10) {
   # Validate input parameters
   if (missing(datasets) || length(datasets) == 0) {
     stop("The `datasets` parameter must be a non-empty list of dataset names.")
@@ -88,6 +89,10 @@ perform_analysis <- function(datasets,
 
   if (!is.logical(scaleX)) {
     stop("The argument `scaleX` must be a logical (TRUE or FALSE).")
+  }
+
+  if (!is.logical(doEDOtrans)) {
+    stop("The argument `doEDOtrans` must be a logical (TRUE or FALSE).")
   }
 
   # Call the validation function
@@ -153,6 +158,7 @@ perform_analysis <- function(datasets,
         jitter_one_dimensional_projections = jitter_one_dimensional_projections,
         nProc = min(nProc, length(local_projection_methods)),
         scaleX = scaleX,
+        doEDOtrans = doEDOtrans,
         remove_colinear_vars = remove_colinear_vars,
         correlation_threshold_for_colinearity = correlation_threshold_for_colinearity,
         vif_threshold_for_colinearity = vif_threshold_for_colinearity
@@ -407,21 +413,21 @@ create_combined_result <- function(projected_data, clusters, projection_result) 
 
 # Function for validation of the methods inputs
 validate_and_filter_parameters <- function(projection_methods,
-                                            clustering_methods,
-                                            method_for_hcpc,
-                                            distance_metric,
-                                            cluster_number_methods,
-                                            selected_cluster_metrics) {
+                                           clustering_methods,
+                                           method_for_hcpc,
+                                           distance_metric,
+                                           cluster_number_methods,
+                                           selected_cluster_metrics) {
   # Define valid methods
   valid_projection_methods <- c("none", "PCA", "ICA", "MDS", "tSNE", "isomap", "LDA",
-                                 "PLSDA", "PLSLDA", "IPCA", "Umap", "NMF", "LLE", "autoencoder")
+                                "PLSDA", "PLSLDA", "IPCA", "Umap", "NMF", "LLE", "autoencoder")
   valid_clustering_methods <- c("none", "kmeans", "kmedoids",
-                                 "diana", "hcpc", "ward.D2", "single", "average", "median", "complete", "centroid")
+                                "diana", "hcpc", "ward.D2", "single", "average", "median", "complete", "centroid")
   valid_hcpc_methods <- c("average", "single", "complete", "ward", "weighted", "flexible", "gaverage")
   valid_distances <- c("euclidean", "maximum", "manhattan", "canberra", "binary", "minkowski")
   valid_cluster_number_methods <- c("orig", "NbClust", "hcpc")
   valid_cluster_metrics <- c("cluster_accuracy", "Silhouette_index", "Dunn_index", "Rand_index", "DaviesBouldin_index", "dbcv_index",
-                              "CalinskiHarabasz_index", "inertia", "adjusted_mutual_information")
+                             "CalinskiHarabasz_index", "inertia", "adjusted_mutual_information")
 
   # Helper function to check input lists
   check_lists <- function(list1, list2) {
@@ -492,34 +498,72 @@ validate_and_filter_parameters <- function(projection_methods,
 
   # Return filtered parameters as a list
   return(list(projection_methods = projection_methods,
-                clustering_methods = clustering_methods,
-                method_for_hcpc = method_for_hcpc,
-                distance_metric = distance_metric,
-                cluster_number_methods = cluster_number_methods,
-                selected_cluster_metrics = selected_cluster_metrics))
+              clustering_methods = clustering_methods,
+              method_for_hcpc = method_for_hcpc,
+              distance_metric = distance_metric,
+              cluster_number_methods = cluster_number_methods,
+              selected_cluster_metrics = selected_cluster_metrics))
 }
 
 
 ############### Functions for data projection ###############
 
 # Function to generate projections
+
+generate_projections <- function(data,
+                                  projection_methods,
+                                  seed,
+                                  jitter_one_dimensional_projections,
+                                  nProc,
+                                  scaleX,
+                                  remove_colinear_vars,
+                                  correlation_threshold_for_colinearity,
+                                  vif_threshold_for_colinearity) {
+  data_clean <- data[, !(names(data) %in% c("Target", "Label"))]
+  target <- data$Target
+  labels <- data$Label
+
+  projections <- lapply(projection_methods, function(projection_method) {
+    message("Applying projection: ", projection_method)
+    tryCatch({
+      projection <- performProjection(X = data_clean, projection_method = projection_method, Target = target, labels = labels, seed = seed,
+                                       jitter_one_dimensional_projections = jitter_one_dimensional_projections, scaleX = scaleX,
+                                       remove_colinear_vars = remove_colinear_vars,
+                                       correlation_threshold_for_colinearity = correlation_threshold_for_colinearity,
+                                       vif_threshold_for_colinearity = vif_threshold_for_colinearity)
+      if (!is.list(projection) || !"Projected" %in% names(projection))
+        stop("Invalid projection result.")
+      return(projection)
+    }, error = function(err) {
+      message("Error with method ", projection_method, ": ", err$message)
+      return(NULL)
+    })
+  }) #, mc.cores = min( length( projection_methods ), nProc ) )
+
+  names(projections) <- projection_methods
+  return(projections)
+}
+
+
+# Function to then perform the actual projection
 performProjection <- function(X,
-                               projection_method = "PCA",
-                               scaleX = TRUE,
-                               Target = NULL,
-                               switchDims = TRUE,
-                               labels = NULL,
-                               seed = 42,
-                               jitter_one_dimensional_projections = FALSE,
-                               remove_colinear_vars = FALSE,
-                               vif_threshold_for_colinearity = 10,
-                               correlation_threshold_for_colinearity = 1,
-                               newdata = NULL,
-                               projection_object = NULL) {
+                              projection_method = "PCA",
+                              scaleX = TRUE,
+                              doEDOtrans = FALSE,
+                              Target = NULL,
+                              switchDims = TRUE,
+                              labels = NULL,
+                              seed = 42,
+                              jitter_one_dimensional_projections = FALSE,
+                              remove_colinear_vars = FALSE,
+                              vif_threshold_for_colinearity = 10,
+                              correlation_threshold_for_colinearity = 1,
+                              newdata = NULL,
+                              projection_object = NULL) {
 
   # Check required libraries
   required_packages <- c("FactoMineR", "fastICA", "MASS", "Rtsne", "RDRToolbox", "mixOmics",
-                          "ABCanalysis", "umap", "NMF", "neuralnet", "pls", "car", "RANN")
+                         "ABCanalysis", "umap", "NMF", "neuralnet", "pls", "car", "RANN")
   for (pkg in required_packages) {
     if (!requireNamespace(pkg, quietly = TRUE)) {
       stop(paste("Package", pkg, "is required but not installed. Please install it."))
@@ -527,7 +571,7 @@ performProjection <- function(X,
   }
 
   valid_projection_methods <- c("none", "PCA", "ICA", "MDS", "tSNE", "isomap", "LDA",
-                                 "PLSDA", "PLSLDA", "IPCA", "Umap", "NMF", "LLE", "autoencoder")
+                                "PLSDA", "PLSLDA", "IPCA", "Umap", "NMF", "LLE", "autoencoder")
   if (!(projection_method %in% valid_projection_methods)) {
     stop(paste("Invalid projection method. Choose from:", paste(valid_projection_methods, collapse = ", ")))
   }
@@ -554,7 +598,12 @@ performProjection <- function(X,
     if (projection_method != "PCA") X <- X[!duplicated(X),]
 
     if (scaleX && !projection_method %in% c("IPCA", "NMF")) {
-      X <- scale(X)
+      if (!doEDOtrans || projection_method != "none") {
+        X <- scale(X)
+      } else {
+        # X <- apply(X,2,function(x) EDOtrans::EDOtrans(as.numeric(x), MaxModes = 2)$DataEDO)
+        X <- apply(X, 2, function(x) as.numeric(x) / (sd(as.numeric(x)) * sqrt(2)))
+      }
     }
 
     if (is.null(labels)) {
@@ -634,9 +683,9 @@ performProjection <- function(X,
       target_column <- "Target"
 
       cleaned_data <- remove_collinear_with_fallback(df_unique_no_labels,
-                                                      target_col = target_column,
-                                                      vif_threshold = vif_threshold_for_colinearity,
-                                                      correlation_threshold = correlation_threshold_for_colinearity)
+                                                     target_col = target_column,
+                                                     vif_threshold = vif_threshold_for_colinearity,
+                                                     correlation_threshold = correlation_threshold_for_colinearity)
 
       X_unique <- cleaned_data[, setdiff(names(cleaned_data), c("Target")), drop = FALSE]
       df_unique <- cbind.data.frame(cleaned_data, Label = labels)
@@ -708,10 +757,10 @@ performProjection <- function(X,
 
   # MAIN PROJECTION SWITCH
   switch(projection_method,
-          "none" = {
+         "none" = {
     Proj <- X_unique
   },
-          "PCA" = {
+         "PCA" = {
     if (is.null(newdata)) {
       pca_obj <- FactoMineR::PCA(X_unique, graph = FALSE, ncp = ncomp)
       Proj <- pca_obj$ind$coord
@@ -720,11 +769,11 @@ performProjection <- function(X,
       Proj <- predict(local_projection_object, newdata = X_unique)$ind$coord[, 1:min(ncomp, ncol(Proj))]
     }
   },
-          "ICA" = {
+         "ICA" = {
     if (is.null(newdata)) {
       ica_obj <- fastICA::fastICA(X_unique, n.comp = ncomp, alg.typ = "parallel",
-                                           fun = "logcosh", alpha = 1, method = "C",
-                                           row.norm = FALSE, maxit = 1000, tol = 1e-04, verbose = FALSE)
+                                         fun = "logcosh", alpha = 1, method = "C",
+                                         row.norm = FALSE, maxit = 1000, tol = 1e-04, verbose = FALSE)
       sorted_ica <- sort_ica_components(S = ica_obj$S, A = ica_obj$A)
       Proj <- sorted_ica$S
       local_projection_object <- ica_obj
@@ -732,7 +781,7 @@ performProjection <- function(X,
       Proj <- as.matrix(X_unique) %*% local_projection_object$A[, 1:ncomp]
     }
   },
-          "MDS" = {
+         "MDS" = {
     if (is.null(newdata)) {
       d <- dist(X_unique)
       mds_obj <- MASS::isoMDS(d, k = ncomp, maxit = 1000, tol = 1e-4)
@@ -745,7 +794,7 @@ performProjection <- function(X,
       Proj <- mds_new$points
     }
   },
-          "tSNE" = {
+         "tSNE" = {
     if (is.null(newdata)) {
       perpl <- ifelse(nrow(X_unique) / 3 - 1 / 3 < 30, nrow(X_unique) / 3 - 0.34, 30)
       tsne_obj <- Rtsne::Rtsne(X_unique, dims = min(ncomp, 3), perplexity = perpl)
@@ -758,7 +807,7 @@ performProjection <- function(X,
       Proj <- tsne_full$Y[(nrow(local_projection_object$X) + 1):nrow(combined_data),]
     }
   },
-          "isomap" = {
+         "isomap" = {
     if (is.null(newdata)) {
       isomap_obj <- RDRToolbox::Isomap(as.matrix(X_unique), dims = ncomp, k = 5)
       Proj <- isomap_obj[[1]]
@@ -768,7 +817,7 @@ performProjection <- function(X,
       Proj <- isomap_obj[[1]]
     }
   },
-          "PLSDA" = {
+         "PLSDA" = {
     if (is.null(newdata)) {
       plsda_obj <- mixOmics::plsda(X_unique, factor(Target_unique))
       plot_df <- mixOmics::plotIndiv(plsda_obj)$df
@@ -779,7 +828,7 @@ performProjection <- function(X,
       Proj <- data.frame(x = pred$variates$X[, 1], y = pred$variates$X[, 2])
     }
   },
-          "LDA" = {
+         "LDA" = {
     if (is.null(newdata)) {
       dfLDA <- cbind.data.frame(Target_unique = Target_unique, X_unique)
       lda_obj <- MASS::lda(factor(Target_unique) ~ ., data = dfLDA, dimen = ncomp)
@@ -791,7 +840,7 @@ performProjection <- function(X,
       Proj <- lda_proj$x[, 1:min(ncomp, ncol(lda_proj$x))]
     }
   },
-          "PLSLDA" = {
+         "PLSLDA" = {
     pls_lda_projection <- function(X, y, ncomp) {
       dfPLSLDA <- cbind.data.frame(y = y, X)
       pls_model <- pls::plsr(y ~ ., data = dfPLSLDA, ncomp = ncomp, scale = TRUE)
@@ -800,7 +849,7 @@ performProjection <- function(X,
       lda_projection <- predict(lda_model, newdata = pls_scores)$x
 
       return(list(pls_model = pls_model, lda_model = lda_model,
-                            pls_scores = pls_scores, lda_projection = lda_projection))
+                         pls_scores = pls_scores, lda_projection = lda_projection))
     }
 
     if (is.null(newdata)) {
@@ -813,11 +862,11 @@ performProjection <- function(X,
       Proj <- lda_proj
     }
   },
-          "IPCA" = {
+         "IPCA" = {
     if (is.null(newdata)) {
       ipca_obj <- mixOmics::ipca(as.matrix(X_unique), ncomp = ncomp, mode = "deflation",
-                                          fun = "logcosh", scale = F, w.init = NULL,
-                                          max.iter = 1000, tol = 1e-04)
+                                        fun = "logcosh", scale = F, w.init = NULL,
+                                        max.iter = 1000, tol = 1e-04)
       plot_df <- mixOmics::plotIndiv(ipca_obj)$df
       Proj <- plot_df[c("x", "y")]
       if (switchDims && ipca_obj$prop_expl_var$X[1] < ipca_obj$prop_expl_var$X[2]) {
@@ -829,7 +878,7 @@ performProjection <- function(X,
       Proj <- data.frame(x = pred$variates$X[, 1], y = pred$variates$X[, 2])
     }
   },
-          "Umap" = {
+         "Umap" = {
     if (is.null(newdata)) {
       umap_obj <- uwot::umap(X_unique, ret_model = TRUE)
       Proj <- umap_obj$embedding
@@ -838,7 +887,7 @@ performProjection <- function(X,
       Proj <- uwot::umap_transform(X_unique, local_projection_object)
     }
   },
-          "NMF" = {
+         "NMF" = {
     perform_nmf <- function(data, ncomp) {
       if (any(data <= 0)) {
         message("Input matrix contains non-positive values. Shifting all values to be positive.")
@@ -858,7 +907,7 @@ performProjection <- function(X,
       Proj <- suppressMessages(perform_nmf(data = as.matrix(X_unique), ncomp = ncomp))
     }
   },
-          "LLE" = {
+         "LLE" = {
     lle_optimized <- function(data, max_dim = 10, max_k = 30, perplexity = 30) {
       X <- as.matrix(data)
       X <- scale(X)
@@ -957,10 +1006,10 @@ performProjection <- function(X,
       Proj <- result_lle$projection
     }
   },
-          "autoencoder" = {
+         "autoencoder" = {
     AutoEncode2 <- function(Data, Hidden = NULL, Learningrate = c(0.01, 0.1, 0.5),
-                                     Threshold = c(0.01, 0.1, 0.5), n_times_n_features = 3,
-                                     Epochs = 10000, ActivationFunction = c("logistic", "tanh"), ...) {
+                                   Threshold = c(0.01, 0.1, 0.5), n_times_n_features = 3,
+                                   Epochs = 10000, ActivationFunction = c("logistic", "tanh"), ...) {
       if (!is.numeric(Data) || any(is.na(Data))) {
         stop("Data must be numeric and contain no missing values.")
       }
@@ -978,19 +1027,19 @@ performProjection <- function(X,
 
       d <- as.data.frame(Data)
       formel <- paste0(paste(colnames(d), collapse = " + "), " ~ ",
-                                paste(colnames(d), collapse = " + "))
+                              paste(colnames(d), collapse = " + "))
 
       param_grid <- expand.grid(
-                Learningrate = Learningrate,
-                Threshold = Threshold
-              )
+               Learningrate = Learningrate,
+               Threshold = Threshold
+             )
 
       train_model <- function(Learningrate, Threshold, ActivationFunction) {
         tryCatch({
           net <- neuralnet::neuralnet(formel, d, hidden = Hidden, stepmax = Epochs,
-                                               lifesign = "none", linear.output = FALSE,
-                                               algorithm = "backprop", learningrate = Learningrate,
-                                               threshold = Threshold)
+                                             lifesign = "none", linear.output = FALSE,
+                                             algorithm = "backprop", learningrate = Learningrate,
+                                             threshold = Threshold)
 
           x <- neuralnet::compute(net, d)
           reproduction <- x$net.result
@@ -1025,19 +1074,19 @@ performProjection <- function(X,
 
     if (is.null(newdata)) {
       Proj <- AutoEncode2(as.matrix(X_unique),
-                                   Learningrate = c(0.01, 0.1, 0.5),
-                                   Threshold = c(0.01, 0.1, 0.5),
-                                   ActivationFunction = c("logistic", "tanh"),
-                                   Epochs = 5000,
-                                   n_times_n_features = 3)
+                                 Learningrate = c(0.01, 0.1, 0.5),
+                                 Threshold = c(0.01, 0.1, 0.5),
+                                 ActivationFunction = c("logistic", "tanh"),
+                                 Epochs = 5000,
+                                 n_times_n_features = 3)
       local_projection_object <- "trained_autoencoder"
     } else {
       Proj <- AutoEncode2(as.matrix(X_unique),
-                                   Learningrate = c(0.01, 0.1, 0.5),
-                                   Threshold = c(0.01, 0.1, 0.5),
-                                   ActivationFunction = c("logistic", "tanh"),
-                                   Epochs = 1000,
-                                   n_times_n_features = 3)
+                                 Learningrate = c(0.01, 0.1, 0.5),
+                                 Threshold = c(0.01, 0.1, 0.5),
+                                 ActivationFunction = c("logistic", "tanh"),
+                                 Epochs = 1000,
+                                 n_times_n_features = 3)
     }
   }, {
     Proj <- X_unique
@@ -1058,16 +1107,16 @@ performProjection <- function(X,
 
   # Return the projection, unique data frame, and projection object
   return(list(Projected = Proj,
-                UniqueData = df_unique,
-                projection_object = local_projection_object))
+              UniqueData = df_unique,
+              projection_object = local_projection_object))
 }
 
 ############### Functions for clustering ###############
 
 # Apply clustering algorithms
 apply_clustering <- function(projection_results, clustering_methods, cluster_number_methods, method_for_hcpc,
-                              distance_metric = "euclidean", seed = 42, nProc = 12,
-                              max_clusters = max_clusters) {
+                             distance_metric = "euclidean", seed = 42, nProc = 12,
+                             max_clusters = max_clusters) {
 
   cluster_list <- pbmcapply::pbmclapply(names(projection_results), function(projection) {
     projection_result <- projection_results[[projection]]
@@ -1080,12 +1129,12 @@ apply_clustering <- function(projection_results, clustering_methods, cluster_num
         clusters_results <- lapply(cluster_number_methods, function(cluster_number_method) {
           set.seed(seed)
           clusters <- performClustering(X = projected_data,
-                                         Target = projection_result$UniqueData$Target,
-                                         clustering_method = cluster_alg,
-                                         cluster_number_method = cluster_number_method,
-                                         method_for_hcpc = method_for_hcpc,
-                                         distance_metric = distance_metric,
-                                         max_clusters = max_clusters)
+                                        Target = projection_result$UniqueData$Target,
+                                        clustering_method = cluster_alg,
+                                        cluster_number_method = cluster_number_method,
+                                        method_for_hcpc = method_for_hcpc,
+                                        distance_metric = distance_metric,
+                                        max_clusters = max_clusters)
           if (cluster_alg != "none") clusters <- renameClusters(trueCls = projection_result$UniqueData$Target, clusters)
           combined_result <- create_combined_result(projected_data, clusters, projection_result)
           return(combined_result)
@@ -1109,7 +1158,7 @@ apply_clustering <- function(projection_results, clustering_methods, cluster_num
 
 # Function to determine the number of clusters
 findOptimalClusters <- function(X, clustering_method, cluster_number_method, Target = NULL,
-                                 method_for_hcpc = "ward", distance_metric = "euclidean", max_clusters = max_clusters) {
+                                method_for_hcpc = "ward", distance_metric = "euclidean", max_clusters = max_clusters) {
 
   # Load necessary libraries
   if (!requireNamespace("NbClust", quietly = TRUE)) {
@@ -1131,33 +1180,33 @@ findOptimalClusters <- function(X, clustering_method, cluster_number_method, Tar
   }
 
   nClusters <- switch(cluster_number_method,
-                       "NbClust" = {
+                      "NbClust" = {
     # Adjust clustering method for compatibility with NbClust
     clustering_method <- switch(clustering_method,
-                                                      "kmedoids" = "kmeans",
-                                                      "diana" = "ward.D2",
-                                                      "hcpc" = "ward",
-                                                      clustering_method
-                         )
+                                                    "kmedoids" = "kmeans",
+                                                    "diana" = "ward.D2",
+                                                    "hcpc" = "ward",
+                                                    clustering_method
+                        )
 
     # Try running NbCLust
 
     res <- try(suppressWarnings(NbClust::NbClust(data = X, diss = NULL, distance = distance_metric,
-                                                                         min.nc = 2, max.nc = max_clusters, method = clustering_method)), silent = TRUE)
+                                                                     min.nc = 2, max.nc = max_clusters, method = clustering_method)), silent = TRUE)
 
     if (!inherits(res, "try-error")) {
       max(unlist(res[4]))
     } else {
       # Try running NbClust using parallel processing
       nbclustIndices <- c("kl", "ch", "hartigan", "ccc", "scott", "marriot", "trcovw", "tracew",
-                                                "friedman", "rubin", "cindex", "db", "silhouette", "duda", "pseudot2",
-                                                "beale", "ratkowsky", "ball", "ptbiserial", "gap", "frey", "mcclain",
-                                                "gamma", "gplus", "tau", "dunn", "hubert", "sdindex", "dindex", "sdbw")
+                                              "friedman", "rubin", "cindex", "db", "silhouette", "duda", "pseudot2",
+                                              "beale", "ratkowsky", "ball", "ptbiserial", "gap", "frey", "mcclain",
+                                              "gamma", "gplus", "tau", "dunn", "hubert", "sdindex", "dindex", "sdbw")
 
       # Determine number of clusters by running NbClust method by method
       nClustersTest <- lapply(nbclustIndices, function(i) {
         res <- try(suppressWarnings(NbClust::NbClust(data = X, diss = NULL, distance = distance_metric,
-                                                                             min.nc = 2, max.nc = max_clusters, method = clustering_method, index = i)), silent = TRUE)
+                                                                         min.nc = 2, max.nc = max_clusters, method = clustering_method, index = i)), silent = TRUE)
         if (!inherits(res, "try-error")) {
           max(unlist(res[4]))
         } else {
@@ -1172,15 +1221,15 @@ findOptimalClusters <- function(X, clustering_method, cluster_number_method, Tar
       result[length(result)]
     }
   },
-                       "hcpc" = {
+                      "hcpc" = {
     res.hcpc <- FactoMineR::HCPC(X, consol = TRUE, method = method_for_hcpc, metric = distance_metric, nb.clust = -1,
-                                                       iter.max = 100, graph = FALSE, nstart = 100)
+                                                     iter.max = 100, graph = FALSE, nstart = 100)
     length(unique(res.hcpc$data.clust$clust))
   },
   # Default case if Target is provided or none matches
-                       if (!is.null(Target)) {
+                      if (!is.null(Target)) {
                         length(unique(Target))
-                       } else {
+                      } else {
     1
   }
   )
@@ -1200,14 +1249,14 @@ findOptimalClusters <- function(X, clustering_method, cluster_number_method, Tar
 
 # Function to perform clustering
 performClustering <- function(X, Target = NULL, clustering_method = "kmeans", cluster_number_method = "orig", method_for_hcpc = "ward",
-                               distance_metric = "euclidean", max_clusters = max_clusters) {
+                              distance_metric = "euclidean", max_clusters = max_clusters) {
 
   # Check if input X is a non-empty data frame
   if (!is.data.frame(X) || nrow(X) == 0) stop("Input data must be a non-empty data frame.")
 
   # Define valid clustering methods
   valid_clustering_methods <- c("none", "kmeans", "kmedoids",
-                                 "diana", "hcpc", "ward.D2", "single", "average", "median", "complete", "centroid")
+                                "diana", "hcpc", "ward.D2", "single", "average", "median", "complete", "centroid")
   valid_hcpc_methods <- c("average", "single", "complete", "ward", "weighted", "flexible", "gaverage")
   valid_distances <- c("euclidean", "maximum", "manhattan", "canberra", "binary", "minkowski")
   valid_cluster_number_methods <- c("orig", "NbClust", "hcpc")
@@ -1231,30 +1280,30 @@ performClustering <- function(X, Target = NULL, clustering_method = "kmeans", cl
     nClusters <- length(unique(Target))
   } else {
     nClusters <- findOptimalClusters(X, clustering_method = clustering_method,
-                                      cluster_number_method = cluster_number_method, Target = Target, max_clusters = max_clusters)
+                                     cluster_number_method = cluster_number_method, Target = Target, max_clusters = max_clusters)
   }
 
   # Perform clustering based on the specified method
   cluster_result <- switch(clustering_method,
-                            "none" = Target, # Return Target directly if method is "none"
-                            "kmeans" = {
+                           "none" = Target, # Return Target directly if method is "none"
+                           "kmeans" = {
     # Perform K-means clustering
     kmeans(X, centers = nClusters, nstart = 100,)$cluster
   },
-                            "kmedoids" = {
+                           "kmedoids" = {
     # Perform K-medoids clustering using PAM
     cluster::pam(X, k = nClusters)$clustering
   },
-                            "diana" = {
+                           "diana" = {
     # Perform divisive clustering
     clusterObject <- cluster::diana(X)
     as.numeric(cutree(clusterObject, k = nClusters))
   },
-                            "hcpc" = {
+                           "hcpc" = {
     # Perform hierarchical clustering and principal component analysis
     res.pca <- FactoMineR::PCA(X, graph = FALSE)
     FactoMineR::HCPC(res.pca, nb.clust = nClusters, metric = distance_metric,
-                                                graph = FALSE, nstart = 100, method = method_for_hcpc)$data.clust$clust
+                                              graph = FALSE, nstart = 100, method = method_for_hcpc)$data.clust$clust
   }, {
     # Perform other hierarchical clustering methods
     clusterObject <- stats::hclust(dist(X, method = distance_metric), method = clustering_method)
@@ -1613,7 +1662,7 @@ calculate_ami <- function(true_labels, cluster_labels) {
 
 # Calculate various cluster indices and return as a data frame
 calculate_cluster_scores_df <- function(clustering_results, projection_methods, clustering_methods, cluster_number_methods,
-                                         distance_metric = "euclidean", nProc = 2) {
+                                        distance_metric = "euclidean", nProc = 2) {
 
   # Validate input
   if (!distance_metric %in% c("euclidean", "manhattan", "maximum", "canberra", "binary", "minkowski")) {
@@ -1680,17 +1729,17 @@ calculate_cluster_scores_df <- function(clustering_results, projection_methods, 
 # Rank the metrics and find the best combination of methods
 process_cluster_scores <-
   function(cluster_scores_df, selected_cluster_metrics = c("cluster_accuracy", "Silhouette_index", "Dunn_index",
-                                                             "Rand_index", "DaviesBouldin_index", "dbcv_index",
-                                                             "CalinskiHarabasz_index", "inertia", "adjusted_mutual_information")) {
+                                                           "Rand_index", "DaviesBouldin_index", "dbcv_index",
+                                                           "CalinskiHarabasz_index", "inertia", "adjusted_mutual_information")) {
 
     # Check if there is something to rank
     if (nrow(cluster_scores_df) > 1) {
       # Validate selected metrics
       valid_cluster_metrics <- c("cluster_accuracy", "Silhouette_index", "Dunn_index", "Rand_index", "DaviesBouldin_index", "dbcv_index",
-                                  "CalinskiHarabasz_index", "inertia", "adjusted_mutual_information")
+                                 "CalinskiHarabasz_index", "inertia", "adjusted_mutual_information")
 
       cluster_metrics_without_orig_classes <- c("Silhouette_index", "Dunn_index", "DaviesBouldin_index",
-                                                 "dbcv_index", "inertia", "CalinskiHarabasz_index")
+                                                "dbcv_index", "inertia", "CalinskiHarabasz_index")
       cluster_metrics_with_orig_classes <- c("cluster_accuracy", "Rand_index", "adjusted_mutual_information")
 
 
@@ -1726,12 +1775,12 @@ process_cluster_scores <-
       } else {
         if (length(selected_cluster_metrics_without_orig_classes) > 0) {
           ranked_columns <- cbind.data.frame(ranked_columns,
-                                              as.vector(ranked_columns[names(ranked_columns) %in% paste0(selected_cluster_metrics_without_orig_classes, "_rank")]))
+                                             as.vector(ranked_columns[names(ranked_columns) %in% paste0(selected_cluster_metrics_without_orig_classes, "_rank")]))
           names(ranked_columns)[ncol(ranked_columns)] <- "dummy"
           names(ranked_columns)[ncol(ranked_columns)] <- "combined_rank_metrics_without_orig_classes"
         } else {
           ranked_columns <- cbind.data.frame(ranked_columns,
-                                              as.vector(rep(1, nrow(ranked_columns))))
+                                             as.vector(rep(1, nrow(ranked_columns))))
           names(ranked_columns)[ncol(ranked_columns)] <- "dummy"
           names(ranked_columns)[ncol(ranked_columns)] <- "combined_rank_metrics_without_orig_classes"
         }
@@ -1743,12 +1792,12 @@ process_cluster_scores <-
       } else {
         if (length(selected_cluster_metrics_with_orig_classes) > 0) {
           ranked_columns <- cbind.data.frame(ranked_columns,
-                                              as.vector(ranked_columns[names(ranked_columns) %in% paste0(selected_cluster_metrics_with_orig_classes, "_rank")]))
+                                             as.vector(ranked_columns[names(ranked_columns) %in% paste0(selected_cluster_metrics_with_orig_classes, "_rank")]))
           names(ranked_columns)[ncol(ranked_columns)] <- "dummy"
           names(ranked_columns)[ncol(ranked_columns)] <- "combined_rank_metrics_with_orig_classes"
         } else {
           ranked_columns <- cbind.data.frame(ranked_columns,
-                                              as.vector(rep(1, nrow(ranked_columns))))
+                                             as.vector(rep(1, nrow(ranked_columns))))
           names(ranked_columns)[ncol(ranked_columns)] <- "dummy"
           names(ranked_columns)[ncol(ranked_columns)] <- "combined_rank_metrics_with_orig_classes"
         }
@@ -1761,12 +1810,12 @@ process_cluster_scores <-
       } else {
         if (length(selected_cluster_metrics) > 0) {
           ranked_columns <- cbind.data.frame(ranked_columns,
-                                              as.vector(ranked_columns[names(ranked_columns) %in% paste0(selected_cluster_metrics, "_rank")]))
+                                             as.vector(ranked_columns[names(ranked_columns) %in% paste0(selected_cluster_metrics, "_rank")]))
           names(ranked_columns)[ncol(ranked_columns)] <- "dummy"
           names(ranked_columns)[ncol(ranked_columns)] <- "combined_rank"
         } else {
           ranked_columns <- cbind.data.frame(ranked_columns,
-                                              as.vector(rep(1, nrow(ranked_columns))))
+                                             as.vector(rep(1, nrow(ranked_columns))))
           names(ranked_columns)[ncol(ranked_columns)] <- "dummy"
           names(ranked_columns)[ncol(ranked_columns)] <- "combined_rank"
         }
@@ -1775,8 +1824,8 @@ process_cluster_scores <-
     } else {
 
       ranked_columns <- cbind.data.frame(combined_rank_metrics_without_orig_classes = 1,
-                                          combined_rank_metrics_with_orig_classes = 1,
-                                          combined_rank = 1
+                                         combined_rank_metrics_with_orig_classes = 1,
+                                         combined_rank = 1
       )
     }
 
@@ -1994,7 +2043,7 @@ analyze_and_plot_misclassifications <-
     LettersA_for_name <- ""
     ABC_misclassified <- list()
     ABC_misclassified$Aind <- setNames(df_cluster_assignments_Misclassified_cases$TimesMisclassified,
-                                        df_cluster_assignments_Misclassified_cases$Case)
+                                       df_cluster_assignments_Misclassified_cases$Case)
 
     for (i in 1:5) {
       # Generate a uniform distribution for comparison
@@ -2083,10 +2132,10 @@ analyze_and_plot_misclassifications <-
       geom_bar(stat = "identity", alpha = 0.5) +
       theme_light() +
       theme(axis.text.x = element_text(angle = 90, vjust = .5, hjust = 1, size = 9),
-             legend.position = c(0.7, 0.6),
-             legend.direction = "vertical",
-             legend.box = "vertical",
-             legend.background = element_rect(color = "transparent", fill = ggplot2::alpha("white", 0.2))) +
+            legend.position = c(0.7, 0.6),
+            legend.direction = "vertical",
+            legend.box = "vertical",
+            legend.background = element_rect(color = "transparent", fill = ggplot2::alpha("white", 0.2))) +
       scale_color_manual(values = palette_ABC) +
       scale_fill_manual(values = palette_ABC) +
       labs(x = "Case number", title = "Times misclassified per case", color = "ABC set 'A'", fill = "Suspect cases")
@@ -2094,7 +2143,7 @@ analyze_and_plot_misclassifications <-
     # Combined Plot ABC
     ABC_plots <-
       cowplot::plot_grid(plotlist = ABC_plotlist,
-                          nrow = 1)
+                         nrow = 1)
 
     # combined_plot_ABC <-
     #   cowplot::plot_grid(p_Misclassified_cases,
@@ -2228,8 +2277,8 @@ analyze_and_plot_misclassifications <-
 
 # Function to plot the projected data and prior classes or clusters
 create_dataset_plots <- function(clustering_results, projection_methods, clustering_methods, cluster_number_methods,
-                                  dataset_name, label_points, highlight_misclassified, points_colored_for, cells_colored_for,
-                                  palette_target = NULL, palette_cluster = NULL, nProc = 2) {
+                                 dataset_name, label_points, highlight_misclassified, points_colored_for, cells_colored_for,
+                                 palette_target = NULL, palette_cluster = NULL, nProc = 2) {
 
   projection_plots <- pbmcapply::pbmclapply(projection_methods, function(projection_method) {
 
@@ -2279,8 +2328,8 @@ create_dataset_plots <- function(clustering_results, projection_methods, cluster
             } else {
               # Prepare columns for jittering
               columns_to_jitter <- intersect(setdiff(names(combined_result),
-                                                       c("Cluster", "Target", "Label", "Misclassified")),
-                                              names(combined_result))
+                                                     c("Cluster", "Target", "Label", "Misclassified")),
+                                             names(combined_result))
               numeric_columns_to_jitter <- sapply(combined_result[, columns_to_jitter], is.numeric)
 
               # Apply jitter with increasing factor based on the attempt number
@@ -2324,11 +2373,11 @@ create_dataset_plots <- function(clustering_results, projection_methods, cluster
 
 # Function to plot Voronoi cells with projection and clustering results
 plotVoronoiTargetProjection <- function(X, targets, clusters = NULL,
-                                         labels = NULL, LabelPoints = FALSE,
-                                         misclassified = NULL, ColorMisClassified = FALSE,
-                                         points_colored_for = "Target", cells_colored_for = "Cluster",
-                                         palette_target = NULL, palette_cluster = NULL,
-                                         cluster_alg = NULL) {
+                                        labels = NULL, LabelPoints = FALSE,
+                                        misclassified = NULL, ColorMisClassified = FALSE,
+                                        points_colored_for = "Target", cells_colored_for = "Cluster",
+                                        palette_target = NULL, palette_cluster = NULL,
+                                        cluster_alg = NULL) {
   # Extended colorblind palette
   cb_palette <- c(
     "#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00",
@@ -2371,7 +2420,7 @@ plotVoronoiTargetProjection <- function(X, targets, clusters = NULL,
 
   # Data preparation
   plotData <- data.frame(Proj1 = X[, 1], Proj2 = X[, 2], Target = targets,
-                          Clusters = clusters, Label = labels, Misclassified = misclassified)
+                         Clusters = clusters, Label = labels, Misclassified = misclassified)
 
   plotData$DotsInformation <- if (points_colored_for == "Target") plotData$Target else plotData$Clusters
   plotData$CellsInformation <- if (cells_colored_for == "Cluster") plotData$Clusters else plotData$Target
@@ -2388,13 +2437,13 @@ plotVoronoiTargetProjection <- function(X, targets, clusters = NULL,
   # Create plot with ggplot2
   plot <- ggplot2::ggplot() +
     ggplot2::geom_polygon(data = voronoi_df, ggplot2::aes(x = x, y = y, group = id, fill = as.factor(plotData$CellsInformation[id])),
-                           alpha = 0.3, color = NA) +
+                          alpha = 0.3, color = NA) +
     ggplot2::geom_point(data = plotData, ggplot2::aes(x = Proj1, y = Proj2,
-                                                        color = as.factor(DotsInformation), shape = as.factor(DotsInformation))) +
+                                                      color = as.factor(DotsInformation), shape = as.factor(DotsInformation))) +
     ggplot2::theme_light() +
     ggplot2::theme(legend.position = "inside", legend.position.inside = c(0.5, 0.08),
-                    legend.box = "horizontal", legend.direction = "horizontal",
-                    legend.background = element_rect(color = "transparent", fill = ggplot2::alpha("white", 0.2))) +
+                   legend.box = "horizontal", legend.direction = "horizontal",
+                   legend.background = element_rect(color = "transparent", fill = ggplot2::alpha("white", 0.2))) +
   #ggplot2::labs( x = "Dim 1", y = "Dim 2", color = "Target", fill = "Cluster", shape = "Target" ) +
   scale_shape_manual(values = shape_values) +
     ggplot2::scale_fill_manual(values = palette_cluster) +
@@ -2410,8 +2459,8 @@ plotVoronoiTargetProjection <- function(X, targets, clusters = NULL,
   if (LabelPoints) {
     plot <- plot +
       ggrepel::geom_text_repel(data = plotData,
-                                ggplot2::aes(x = Proj1, y = Proj2, color = as.factor(DotsInformation),
-                                              label = Label, fontface = 2), vjust = -1, size = 3, max.overlaps = Inf)
+                               ggplot2::aes(x = Proj1, y = Proj2, color = as.factor(DotsInformation),
+                                            label = Label, fontface = 2), vjust = -1, size = 3, max.overlaps = Inf)
   }
 
   # Color misclassified cases in red
@@ -2420,7 +2469,7 @@ plotVoronoiTargetProjection <- function(X, targets, clusters = NULL,
       plot <- plot +
         geom_text(
           aes(x = Inf, y = Inf,
-               label = paste0(round(100 * sum(plotData$Misclassified) / nrow(X), 1), "% misclassified")),
+              label = paste0(round(100 * sum(plotData$Misclassified) / nrow(X), 1), "% misclassified")),
           hjust = 1,
           vjust = 1
         )
@@ -2492,9 +2541,9 @@ combine_all_plots <- function(datasets, projection_plots, projection_methods, cl
       fig <- cowplot::plot_grid(plotlist = all_plots[start_idx:end_idx], ncol = columns, nrow = rows, labels = "AUTO")
     } else {
       fig <- cowplot::plot_grid(plotlist = all_plots[start_idx:end_idx], ncol = columns, nrow = rows,
-                                 labels =
+                                labels =
                                   paste0(rep(LETTERS[1:rows], each = columns), rep(1:columns, rows))
-                                )
+      )
     }
     return(fig)
   }
@@ -2613,7 +2662,7 @@ update_plot_titles <- function(projection_plots, title_size = 7, wrap_chars = 25
             plot.title = element_text(
               size = title_size,
               face = "plain",
-              lineheight = 0.8,    # Controls spacing between wrapped lines
+              lineheight = 0.8, # Controls spacing between wrapped lines
               margin = margin(b = 4)
             )
           )

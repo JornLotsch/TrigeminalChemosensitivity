@@ -23,9 +23,10 @@ library(missRanger)
 library(missForest)
 library(opdisDownsampling)
 library(twosamples)
-
+library(DataVisualizations)
 
 source("globals.R")
+source("PDEplotGG.R")
 
 # ==============================================================================
 # 2. Define Helper Functions
@@ -805,7 +806,7 @@ print("Checking which variables or cases have missings more than acceptable.")
 n_missings_per_variable <- apply(analysis_dataset_CO2_breath_hold, 2, function(x) sum(is.na(x)))
 cat("\n", paste0("Missing values per variable (descending order): "))
 sort(n_missings_per_variable[which(n_missings_per_variable > 0)], decreasing = TRUE)
-sort(n_missings_per_variable[which(n_missings_per_variable > 0)], decreasing = TRUE) / nrow(analysis_dataset_CO2_breath_hold) *100
+sort(n_missings_per_variable[which(n_missings_per_variable > 0)], decreasing = TRUE) / nrow(analysis_dataset_CO2_breath_hold) * 100
 
 
 f_missings <- 0.2
@@ -838,20 +839,50 @@ print(n_missings_analysis_dataset_remaining_vars / length(unlist(analysis_datase
 
 cat("\n=== Splitting data into training and validation sets ===\n")
 
-# Prepare dataset for splitting (remove ID for split, will rejoin later)
+# Prepare the dataset used for splitting.
+# The ID column is kept in the data here so it can be exported later.
 analysis_dataset_to_split <- analysis_dataset_remaining_vars
 
-# Perform stratified downsampling split
+# # Perform stratified downsampling split
+# set.seed(42)
+# analysis_dataset_split <- opdisDownsampling::opdisDownsampling(
+#   analysis_dataset_to_split,
+#   Size = 0.8,
+#   Seed = 42,
+#   nTrials = 100000,
+#   MaxCores = min(12, parallel::detectCores() - 1)
+# )
+
+
+# Perform a stratified split using caTools.
+# 's' should be a numeric seed value, and 'Size' the training proportion.
 set.seed(42)
-analysis_dataset_split <- opdisDownsampling::opdisDownsampling(
-  analysis_dataset_to_split,
-  Size = 0.8,
-  Seed = 42,
-  nTrials = 100000,
-  MaxCores = min(12, parallel::detectCores() - 1)
+sample <- sample(1:nrow(analysis_dataset_to_split), size = (nrow(analysis_dataset_to_split) * 0.8), replace = FALSE)
+
+
+# Create training and validation subsets.
+
+train_data <- analysis_dataset_to_split[sample,]
+dim(train_data)
+test_data <- analysis_dataset_to_split[-sample,]
+dim(test_data)
+
+# Store split results in a structured list.
+analysis_dataset_split <- list(
+  ReducedData = train_data,
+  RemovedData = test_data,
+  ReducedInstances = as.character(train_data$ID),
+  RemovedInstances = as.character(test_data$ID)
 )
 
-# write split result IDs
+# Check whether training and validation sets have similar amounts of non-missing data.
+valid_train_n <- colSums(!is.na(analysis_dataset_split$ReducedData))
+valid_validation_n <- colSums(!is.na(analysis_dataset_split$RemovedData))
+ratios <- valid_validation_n / valid_train_n
+plot(ratios, main = "Validation/training non-missing count ratios - ideally 0.25")
+describe(ratios)
+
+# Write training instance IDs to file.
 write.table(
   as.matrix(analysis_dataset_split$ReducedInstances),
   "analysis_training_instances.csv",
@@ -859,7 +890,6 @@ write.table(
   row.names = FALSE,
   col.names = FALSE
 )
-
 
 # Extract training and validation sets
 training_data <- analysis_dataset_split$ReducedData
@@ -1125,6 +1155,9 @@ validation_data_imputed <- impute_dataset(
 cat("\n=== Combining Imputed Data ===\n")
 
 # Combine training and validation back together
+dim(training_data_imputed)
+dim(validation_data_imputed)
+
 analysis_dataset_imputed <- rbind(training_data_imputed, validation_data_imputed)
 
 # Sort by ID to maintain original order
@@ -1188,7 +1221,7 @@ imputed_CO2_thresholds <- training_data_imputed$`CO2 threshold`[is.na(training_d
 # 1. Overlay density plot
 df_plot_CO2_thresholds <- data.frame(
   value = c(observed_CO2_thresholds, imputed_CO2_thresholds),
-  type = rep(c("Observed", "Imputed"), c(length(observed), length(imputed)))
+  type = rep(c("Observed", "Imputed"), c(length(observed_CO2_thresholds), length(imputed_CO2_thresholds)))
 )
 
 p_observed_imputed_CO2_thresholds <- ggplot(df_plot_CO2_thresholds, aes(x = value, fill = type, color = type)) +
@@ -1235,7 +1268,7 @@ imputed_Lateralization <- training_data_imputed$`Lateralization (x/20)`[is.na(tr
 # 1. Overlay density plot
 df_plot_Lateralization <- data.frame(
   value = c(observed_Lateralization, imputed_Lateralization),
-  type = rep(c("Observed", "Imputed"), c(length(observed), length(imputed)))
+  type = rep(c("Observed", "Imputed"), c(length(observed_Lateralization), length(imputed_Lateralization)))
 )
 
 p_observed_imputed_Lateralization <- ggplot(df_plot_Lateralization, aes(x = value, fill = type, color = type)) +
