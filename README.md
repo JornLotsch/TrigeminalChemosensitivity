@@ -38,10 +38,10 @@ Computational pipeline for analyzing trigeminal sensitivity measures and their p
 │   ├── read_data_and_basic_corrections.R          [Data import & validation]
 │   ├── build_analysis_dataset.R                   [Dataset construction: 242 variables across 8 categories]
 │   │
-│   ├── trigeminal_measures_distributions_correlations_y_trig_1_REFORMATTED.R
+│   ├── trigeminal_measures_distributions_correlations_y_trig_1.R
 │   │   └─ Exploratory validation: distributions, correlations, group comparisons on non-imputed data
 │   │
-│   ├── trigeminal_measures_clustering_y_trig_2_3_REFORMATTED.R
+│   ├── trigeminal_measures_clustering_y_trig_2_3.R
 │   │   └─ Phenotype discovery: unsupervised clustering (6 projections × 8 algorithms)
 │   │   └─ Training/validation evaluation of cluster stability
 │   │
@@ -73,7 +73,7 @@ Computational pipeline for analyzing trigeminal sensitivity measures and their p
 
 ### Exploratory Validation (Non-Imputed Data)
 
-**File:** `trigeminal_measures_distributions_correlations_y_trig_1_REFORMATTED.R`
+**File:** `trigeminal_measures_distributions_correlations_y_trig_1.R`
 
 Exploratory validation on **non-imputed data** to document observed patterns without imputation assumptions:
 
@@ -89,7 +89,7 @@ Exploratory validation on **non-imputed data** to document observed patterns wit
 
 ### Structure Exploration (Full Imputed Data)
 
-**File:** `trigeminal_measures_distributions_correlations_y_trig_1_REFORMATTED.R`
+**File:** `trigeminal_measures_distributions_correlations_y_trig_1.R`
 
 Structure exploration on **complete imputed dataset** (n=1001) to characterize population-level trigeminal dimensionality:
 
@@ -102,7 +102,7 @@ Structure exploration on **complete imputed dataset** (n=1001) to characterize p
 
 ### Cluster-Based Phenotypes (Training/Validation Data)
 
-**File:** `trigeminal_measures_clustering_y_trig_2_3_REFORMATTED.R`
+**File:** `trigeminal_measures_clustering_y_trig_2_3.R`
 
 Data-driven phenotype discovery using unsupervised clustering on **training data only** (n=801) to prevent information leakage:
 
@@ -199,12 +199,12 @@ source("R/build_analysis_dataset.R")
 
 **Step 2: Univariate Analysis (Y_trig1)**
 ```r
-source("R/trigeminal_measures_distributions_correlations_y_trig_1_REFORMATTED.R")
+source("R/trigeminal_measures_distributions_correlations_y_trig_1.R")
 ```
 
 **Step 3: Clustering Analysis (Y_trig2, Y_trig3)**
 ```r
-source("R/trigeminal_measures_clustering_y_trig_2_3_REFORMATTED.R")
+source("R/trigeminal_measures_clustering_y_trig_2_3.R")
 ```
 
 **Optional: Exploratory Analyses**
