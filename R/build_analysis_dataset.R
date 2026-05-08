@@ -1,130 +1,49 @@
 ################################################################################
-# Trigeminal Sensitivity Analysis - Bormann Study
+# BUILD_ANALYSIS_DATASET.R - Data Preprocessing and Dataset Construction
+################################################################################
 # Author: Jorn Lotsch
-# Description: Analysis of trigeminal sensitivity study data, including
-#              preprocessing, translation, categorization, descriptive stats,
-#              and tabulations per variable category.
+# Study: Trigeminal Sensitivity Analysis
+#
+# Description:
+#   Builds the main analysis dataset from raw data files. Performs data cleaning,
+#   variable translation, categorization, recoding, and imputation.
+#
+# Input Files:
+#   - trigeminale_daten_corrected_translated.csv (main data)
+#
+# Output Files:
+#   - analysis_dataset.csv (complete dataset)
+#   - analysis_dataset_training.csv (training set)
+#   - analysis_dataset_validation.csv (validation set)
+#   - analysis_dataset_training_imputed.csv (imputed training)
+#   - analysis_dataset_validation_imputed.csv (imputed validation)
+#
+# Dataset-Specific Functions (defined in this file):
+#   - recode_problem_start()             : Recode olfactory problem onset
+#   - recode_problem_change()            : Recode problem change descriptions
+#   - print_names_by_category()          : Print variable names by category
+#   - generate_categories_html_table...(): Generate category HTML tables
+#   - combine_all_categories()           : Combine all category data
+#   - detect_variable_type()             : Detect variable type for imputation
+#   - fallback_impute()                  : Simple imputation fallback
+#   - impute_dataset()                   : Main imputation function
+#
+# Note: General utility functions (one_hot_encode_var, convert_jn_to_numeric, etc.)
+#       are now loaded automatically from utils.R via globals.R
 ################################################################################
 
 
 # ==============================================================================
-# 1. Load Required Libraries
+# 1. Load Required Libraries and Utilities
 # ==============================================================================
 
-library(stringr)
-library(dplyr)
-library(readr)
-library(tidyr)
-library(psych)
-library(ggplot2)
-library(ggthemes)
-library(nortest)
-library(missRanger)
-library(missForest)
-library(opdisDownsampling)
-library(twosamples)
-library(DataVisualizations)
-
+# Load global configuration and utility functions
+# This loads: colors, translations, dictionaries, AND all utility functions
 source("globals.R")
-source("PDEplotGG.R")
-
-# ==============================================================================
-# 2. Define Helper Functions
-# ==============================================================================
-
-#' One-hot encode a nominal vector
-#'
-#' Converts a factor or character vector to a one-hot encoded data.frame.
-#'
-#' @param var The vector to encode (factor or character).
-#' @param var_name Base name for new columns.
-#' @return A data.frame with one column per factor level, values are 0/1.
-one_hot_encode_var <- function(var, var_name) {
-  factor_var <- factor(var, exclude = NULL)
-  levels_var <- levels(factor_var)
-  one_hot_list <- lapply(levels_var, function(lev) {
-    if (is.na(lev)) {
-      as.integer(is.na(var))
-    } else {
-      as.integer(ifelse(is.na(var), 0, var == lev))
-    }
-  })
-  names(one_hot_list) <- paste0(var_name, "_", ifelse(is.na(levels_var), "NA", levels_var))
-  return(as.data.frame(one_hot_list))
-}
-
-#' Convert yes/no (j/n) to numeric
-#'
-#' Recodes "j" to 1, "n" to 0, NA stays NA.
-#'
-#' @param x Character vector of "j", "n", or NA.
-#' @return Numeric vector (1/0/NA).
-convert_jn_to_numeric <- function(x) {
-  ifelse(is.na(x), NA, ifelse(x == "j", 1, 0))
-}
-
-#' Convert TRUE/FALSE logicals to numeric
-#'
-#' Converts TRUE to 1, FALSE to 0, NA stays NA.
-#'
-#' @param x Logical vector (TRUE/FALSE/NA).
-#' @return Numeric vector (1/0/NA).
-convert_truefalse_to_numeric <- function(x) {
-  ifelse(is.na(x), NA, ifelse(x == TRUE, 1, 0))
-}
-
-#' Get dimension of a data.frame without ID column
-#'
-#' @param df A data.frame or tibble with optional "ID" column.
-#' @return Vector: number of rows and columns (excluding "ID").
-dim_wo_ID <- function(df) {
-  if ("ID" %in% names(df)) {
-    dim(df[, -1])
-  } else dim(df)
-}
-
-#' Count variables in a data.frame without ID column
-#'
-#' @param df A data.frame or tibble with optional "ID" column.
-#' @return Integer, number of variables not counting "ID".
-nVars_wo_ID <- function(df) {
-  if ("ID" %in% names(df)) {
-    length(names(df)) - 1
-  } else length(names(df))
-}
-
-#' Get variable names excluding ID column
-#'
-#' @param df A data.frame or tibble with optional "ID" column.
-#' @return Character vector of variable names (excluding "ID").
-var_names_wo_ID <- function(df) {
-  names(df)[!names(df) %in% "ID"]
-}
-
-#' Left join two dataframes and set NA values in new columns to a given value
-#'
-#' @param df_primary Left (main) dataframe
-#' @param df_secondary Right (joined) dataframe
-#' @param by Character vector of columns to join by (default: "ID")
-#' @param fill_value Value to replace NAs with (default: 0)
-#' @return A joined dataframe with NAs in added columns from df_secondary replaced by fill_value
-left_join_fill <- function(df_primary, df_secondary, by = "ID", fill_value = 0) {
-  # Do join
-  df_combined <- left_join(df_primary, df_secondary, by = by)
-
-  # Find columns that were added from secondary dataframe
-  added_cols <- setdiff(names(df_combined), names(df_primary))
-
-  # For each added column, replace NA with fill_value
-  df_combined <- df_combined %>%
-    mutate(across(all_of(added_cols), ~ ifelse(is.na(.), fill_value, .)))
-
-  return(df_combined)
-}
 
 
 # ==============================================================================
-# 3. Read Raw Data
+# 2. Read Raw Data
 # ==============================================================================
 
 trigeminale_daten_corrected_translated <- read.csv("trigeminale_daten_corrected_translated.csv", check.names = FALSE)
@@ -136,9 +55,6 @@ variable_categories <- read.csv("trigeminale_daten_variable_categories.csv", che
 
 # Remove duplicated columns, keeping the first occurrence
 trigeminale_daten_corrected_translated <- trigeminale_daten_corrected_translated[, !duplicated(names(trigeminale_daten_corrected_translated))]
-
-# Load global mappings (e.g., category labels, translation dictionaries).
-source("globals.R")
 
 # ==============================================================================
 # 4. Initialize Analysis Dataset
@@ -1218,20 +1134,41 @@ cat("  - analysis_dataset_validation_imputed.csv (validation set only)\n")
 observed_CO2_thresholds <- training_data$`CO2 threshold`[!is.na(training_data$`CO2 threshold`)]
 imputed_CO2_thresholds <- training_data_imputed$`CO2 threshold`[is.na(training_data$`CO2 threshold`)]
 
-# 1. Overlay density plot
 df_plot_CO2_thresholds <- data.frame(
   value = c(observed_CO2_thresholds, imputed_CO2_thresholds),
   type = rep(c("Observed", "Imputed"), c(length(observed_CO2_thresholds), length(imputed_CO2_thresholds)))
 )
 
+# 1. Anderson-Darling test (H0: same distribution)
+ad_result_CO2_thresholds <- twosamples::ad_test(observed_CO2_thresholds, observed_CO2_thresholds)
+print(ad_result_CO2_thresholds) # p > 0.05 = distributions similar
+
+ad_lab_co2 <- sprintf(
+  "Anderson-Darling\nA = %.3f\np = %.3g",
+  as.numeric(ad_result_CO2_thresholds[["Test Stat"]]),
+  ad_result_CO2_thresholds[["P-Value"]]
+)
+x_pos <- max(df_plot_CO2_thresholds$value, na.rm = TRUE)
+y_pos <- -Inf
+
+# 2. Overlay density plot
 p_observed_imputed_CO2_thresholds <- ggplot(df_plot_CO2_thresholds, aes(x = value, fill = type, color = type)) +
   geom_density(alpha = 0.2, size = 1) +
-  scale_fill_manual(values = c("cornsilk2", "cornsilk4")) +
-  scale_color_manual(values = c("cornsilk2", "cornsilk4")) +
+  scale_fill_manual(values = c(actual_palette[2], actual_palette[4])) +
+  scale_color_manual(values = c(actual_palette[2], actual_palette[4])) +
   labs(title = "CO2 Threshold: Observed vs imputed distributions",
         x = "CO2 Threshold (ms)", y = "Density") +
   theme_plot() +
-  theme(legend.position.inside = TRUE, legend.position = c(.7, .8), legend.direction = "horizontal")
+  theme(legend.position.inside = TRUE, legend.position = c(.7, .8), legend.direction = "horizontal") +
+  annotate(
+    "text",
+    x = x_pos,
+    y = y_pos,
+    label = ad_lab_co2,
+    hjust = 1,
+    vjust = -0.2,
+    size = 3.5
+  )
 
 print(p_observed_imputed_CO2_thresholds)
 ggsave("p_observed_imputed_CO2_thresholds.svg", p_observed_imputed_CO2_thresholds,
@@ -1246,39 +1183,58 @@ df_plot_CO2_thresholds_wide <- df_plot_CO2_thresholds %>%
     values_from = value,
     values_fill = NA_real_
   ) %>%
-  select(-idx)
+  dplyr::select(-idx)
 
 
 pPDE_observed_imputed_CO2_thresholds <- PDEplotGG(df_plot_CO2_thresholds_wide) +
   theme_plot() +
   labs(title = "CO2 Threshold: Observed vs imputed distributions", x = "CO2 threshold (ms)", y = "PDE", color = "type") +
-  scale_color_manual(values = c("grey83", "cornsilk4"), labels = c("Obsvered", "Imputed")) +
+  scale_color_manual(values = c(actual_palette[5], actual_palette[4]), labels = c("Obsvered", "Imputed")) +
   theme(legend.position.inside = TRUE, legend.position = c(.7, .8), legend.direction = "horizontal")
 
 print(pPDE_observed_imputed_CO2_thresholds)
 
 
-# 2. Anderson-Darling test (H0: same distribution)
-ad_result_CO2_thresholds <- twosamples::ad_test(observed_CO2_thresholds, observed_CO2_thresholds)
-print(ad_result_CO2_thresholds) # p > 0.05 = distributions similar
-
 observed_Lateralization <- training_data$`Lateralization (x/20)`[!is.na(training_data$`Lateralization (x/20)`)]
 imputed_Lateralization <- training_data_imputed$`Lateralization (x/20)`[is.na(training_data$`Lateralization (x/20)`)]
 
-# 1. Overlay density plot
 df_plot_Lateralization <- data.frame(
   value = c(observed_Lateralization, imputed_Lateralization),
   type = rep(c("Observed", "Imputed"), c(length(observed_Lateralization), length(imputed_Lateralization)))
 )
 
+# 1. Anderson-Darling test (H0: same distribution)
+ad_result_Lateralization <- twosamples::ad_test(observed_Lateralization, observed_Lateralization)
+print(ad_result_Lateralization) # p > 0.05 = distributions similar
+
+ad_lab_lat <- sprintf(
+  "Anderson-Darling\nA = %.3f\np = %.3g",
+  as.numeric(ad_result_Lateralization[["Test Stat"]]),
+  ad_result_Lateralization[["P-Value"]]
+)
+x_pos <- max(df_plot_Lateralization$value, na.rm = TRUE)
+y_pos <- -Inf
+
+
+# 1. Overlay density plot
+
 p_observed_imputed_Lateralization <- ggplot(df_plot_Lateralization, aes(x = value, fill = type, color = type)) +
   geom_density(alpha = 0.2, size = 1) +
-  scale_fill_manual(values = c("cornsilk2", "cornsilk4")) +
-  scale_color_manual(values = c("cornsilk2", "cornsilk4")) +
+  scale_fill_manual(values = c(actual_palette[2], actual_palette[4])) +
+  scale_color_manual(values = c(actual_palette[2], actual_palette[4])) +
   labs(title = "Lateralization: Observed vs imputed distributions",
         x = "Lateralization [n correct]", y = "Density") +
   theme_plot() +
-  theme(legend.position.inside = TRUE, legend.position = c(.2, .8), legend.direction = "vertical")
+  theme(legend.position.inside = TRUE, legend.position = c(.2, .8), legend.direction = "vertical") +
+  annotate(
+    "text",
+    x = x_pos,
+    y = y_pos,
+    label = ad_lab_lat,
+    hjust = 1,
+    vjust = -0.2,
+    size = 3.5
+  )
 
 print(p_observed_imputed_Lateralization)
 ggsave("p_observed_imputed_Lateralization.svg", p_observed_imputed_Lateralization,
@@ -1293,20 +1249,17 @@ df_plot_Lateralization_wide <- df_plot_Lateralization %>%
     values_from = value,
     values_fill = NA_real_
   ) %>%
-  select(-idx)
+  dplyr::select(-idx)
 
 
 pPDE_observed_imputed_Lateralization <- PDEplotGG(df_plot_Lateralization_wide) +
   theme_plot() +
   labs(title = "Lateralization: Observed vs imputed distributions", x = "Lateralization [n correct]", y = "PDE", color = "type") +
-  scale_color_manual(values = c("grey83", "cornsilk4"), labels = c("Obsvered", "Imputed")) +
+  scale_color_manual(values = c(actual_palette[5], actual_palette[4]), labels = c("Obsvered", "Imputed")) +
   theme(legend.position.inside = TRUE, legend.position = c(.2, .8), legend.direction = "horizontal")
 
 print(pPDE_observed_imputed_Lateralization)
 
-# 2. Anderson-Darling test (H0: same distribution)
-ad_result_Lateralization <- twosamples::ad_test(observed_Lateralization, observed_Lateralization)
-print(ad_result_Lateralization) # p > 0.05 = distributions similar
 
 
 # =============================== #

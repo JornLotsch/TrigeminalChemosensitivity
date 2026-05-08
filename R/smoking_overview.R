@@ -344,7 +344,7 @@ p_smoking <- ggplot(all_smokers, aes(
     legend.position = "right",
     axis.text.y = element_text(size = 3),
    # axis.text.x = element_text(size = 8, angle = 45, hjust = 1),
-    panel.grid.major.y = element_line(color = "grey90", linewidth = 0.3),
+    panel.grid.major.y = element_line(color = actual_palette[5], linewidth = 0.3),
     panel.grid.minor = element_blank()
   )
 
@@ -450,7 +450,7 @@ p_smoking_all <- ggplot(
   theme(
     legend.position = "right",
     axis.text.y = element_text(size = 3),
-    panel.grid.major.y = element_line(color = "grey90", linewidth = 0.3),
+    panel.grid.major.y = element_line(color = actual_palette[5], linewidth = 0.3),
     panel.grid.minor = element_blank()
   )
 

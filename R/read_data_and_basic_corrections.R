@@ -1,5 +1,5 @@
 ################################################################################
-# Trigeminal Sensitivity Analysis - Bormann Study
+# Trigeminal Sensitivity Analysis
 # Author: Jorn Lotsch
 # Description: Full analysis pipeline for trigeminal sensitivity study data.
 #              Covers data import, variable categorization, type inspection,

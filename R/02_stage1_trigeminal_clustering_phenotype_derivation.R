@@ -1,7 +1,7 @@
 ################################################################################
 # Trigeminal Sensitivity Analysis - Clustering and Validation
 #
-# Author: Joern Lotsch
+# Author: Jorn Lotsch
 # Date: 2025-01-26
 #
 # Description:
@@ -45,73 +45,24 @@
 # 1. LOAD REQUIRED LIBRARIES
 # ============================================================================ #
 
-# Core data manipulation
-library(dplyr)          # Data manipulation
-library(tidyr)          # Data tidying
-library(tibble)         # Modern data frames
-library(purrr)          # Functional programming
-library(reshape2)       # Data reshaping
-
-# Visualization
-library(ggplot2)        # Core plotting
-library(ggpubr)         # Publication-ready plots
-library(ggplotify)      # Convert base plots to ggplot
-library(ggpmisc)        # Additional ggplot2 functionality
-library(ggthemes)       # Extra themes
-library(cowplot)        # Plot composition
-library(patchwork)        # Plot composition
-library(grid)           # Grid graphics
-library(gridExtra)      # Multiple grid plots
-library(ComplexHeatmap) # Advanced heatmaps
-library(circlize)       # Color mapping for heatmaps
-library(viridis)        # Color scales
-library(colorspace)     # Color manipulation
-library(scales)         # Scale functions
-
-# Statistical analysis
-library(boot)           # Bootstrap methods
-library(effsize)        # Effect size calculations
-library(Hmisc)          # Statistical tools
-library(psych)          # Correlation analysis
-library(MASS)           # Robust statistics
-
-# Clustering and dimensionality reduction
-library(cluster)        # Clustering algorithms
-library(NbClust)        # Optimal cluster number
-library(factoextra)     # Factor visualization
-library(FactoMineR)     # Factor analysis
-
-# Specialized analyses
-library(DataVisualizations) # Pareto Density Estimation
-library(opGMMassessment)    # Gaussian Mixture Models
-library(missForest)         # Imputation methods
-library(cvms)               # Confusion matrix visualization
-library(vcd)                # Categorical data visualization
-
-# Utilities
-library(forcats)        # Factor handling
-library(stringr)        # String manipulation
-library(lubridate)      # Date/time handling
-library(pbmcapply)      # Parallel apply functions
-
 # Load custom functions and global variables
 source("globals.R")
+source("utils.R")
 source("ProjectionsBiomed_MainFunctions_6_1core.R")
-source("/home/joern/Aktuell/ABCplotGG.R")
 
 # ============================================================================ #
 # 2. GLOBAL OPTIONS AND ANALYSIS PARAMETERS
 # ============================================================================ #
 
 # Analysis control switches
-remove_censored <- FALSE            # Whether to exclude censored values
-scale_0_100 <- FALSE                # Whether to scale all measures to 0-100
+remove_censored <- FALSE # Whether to exclude censored values
+scale_0_100 <- FALSE # Whether to scale all measures to 0-100
 analyze_only_untransformed <- FALSE # Skip transformation analysis
-plot_only_untransformed <- TRUE     # Show only original data in plots
+plot_only_untransformed <- TRUE # Show only original data in plots
 
 # Computational resources
 nProc_possible <- parallel::detectCores() - 1
-nProc_desired <- 48
+nProc_desired <- 12
 
 # Dimensionality reduction methods to evaluate
 projection_methods <- c("none", "PCA", "ICA", "MDS", "tSNE", "Umap")
@@ -122,7 +73,7 @@ clustering_methods <- c("kmeans", "kmedoids",
                         "median", "complete", "centroid")
 
 # Method for determining optimal number of clusters
-cluster_number_methods <- "NbClust"
+cluster_number_methods <- c("NbClust") #, "none")
 
 # Clustering quality metrics (full set)
 unsupervised_metrics_full <- c("Silhouette_index", "Dunn_index",
@@ -140,127 +91,17 @@ valid_cluster_metrics <- c("cluster_accuracy", "Silhouette_index", "Dunn_index",
                            "adjusted_mutual_information")
 
 # Color palettes
-original_colors <- c("cornsilk1", "cornsilk2", "cornsilk3", "cornsilk4")
+original_colors <- c(actual_palette[1], actual_palette[2], actual_palette[3], actual_palette[4])
 dark_colors <- darken(original_colors, amount = 0.3)
 
 # ============================================================================ #
 # 3. HELPER FUNCTIONS
 # ============================================================================ #
 
-#' Sign-Preserving Logarithmic Transformation (Zero-Invariant)
-#'
-#' Applies logarithmic transformation while preserving the sign of the input.
-#' Handles zero values gracefully using log1p.
-#'
-#' @param x Numeric vector to transform
-#' @param base Logarithm base: 0 (natural log), 2, 10, or custom value
-#' @return Transformed vector maintaining sign of original values
-#' @examples
-#' slog(c(-10, 0, 10), base = 10)
-slog <- function(x, base = 10) {
-  absX <- abs(x)
-  s <- sign(x)
-
-  if (base == 0) {
-    return(s * log1p(absX))
-  } else if (base == 2) {
-    return(s * log2(absX + 1))
-  } else if (base == 10) {
-    return(s * log10(absX + 1))
-  } else {
-    return(s * log1p(absX) * log(base))
-  }
-}
-
-#' Inverse Sign-Preserving Logarithmic Transformation
-#'
-#' Reverses the slog transformation to recover original values.
-#'
-#' @param y Transformed values from slog()
-#' @param base Logarithm base used in forward transformation
-#' @return Original scale values
-inv_slog <- function(y, base = 10) {
-  s <- sign(y)
-  absY <- abs(y)
-
-  if (base == 0) {
-    val <- expm1(absY)
-  } else if (base == 2) {
-    val <- 2^absY - 1
-  } else if (base == 10) {
-    val <- 10^absY - 1
-  } else {
-    val <- expm1(absY / log(base))
-  }
-  return(s * val)
-}
-
-#' Reflected Logarithmic Transformation
-#'
-#' Applies slog transformation after reflecting data around maximum value.
-#' Useful for right-skewed distributions.
-#'
-#' @param x Numeric vector to transform
-#' @return Reflected and log-transformed vector
-reflect_slog <- function(x) {
-  slog(max(x, na.rm = TRUE) + 1 - x)
-}
-
-#' Reflected Logarithmic Transformation (Unflipped)
-#'
-#' Same as reflect_slog but maintains original direction by negating result.
-#'
-#' @param x Numeric vector to transform
-#' @return Reflected, log-transformed, and negated vector
-reflect_slog_unflipped <- function(x) {
-  -slog(max(x, na.rm = TRUE) + 1 - x)
-}
-
-#' Inverse Reflected Logarithmic Transformation (Unflipped)
-#'
-#' Reverses the reflect_slog_unflipped transformation.
-#'
-#' @param y Transformed values
-#' @param original_max Maximum value from original data
-#' @param base Logarithm base used in transformation
-#' @return Original scale values
-inv_reflect_slog_unflipped <- function(y, original_max, base = 10) {
-  M <- original_max
-  x_original <- M + 1 - inv_slog(-y, base)
-  return(x_original)
-}
-
-#' Create Pareto Density Estimation Plot with ggplot2
-#'
-#' Generates density plots using Pareto Density Estimation for each column
-#' in the input data matrix.
-#'
-#' @param Data Numeric matrix or data frame
-#' @return ggplot object with PDE curves
-PDEplotGG <- function(Data) {
-  Data <- as.matrix(Data)
-  m <- matrix(NA, nrow = 0, ncol = 3)
-
-  require(DataVisualizations)
-
-  # Calculate PDE for each column
-  for (i in seq_len(ncol(Data))) {
-    PDE <- ParetoDensityEstimation(as.vector(na.omit(Data[, i])))
-    m2 <- PDE$kernels
-    m3 <- PDE$paretoDensity
-    m1 <- rep(i, length(m2))
-    m <- rbind(m, cbind(m1, m2, m3))
-  }
-
-  mdf <- data.frame(m)
-  require(ggplot2)
-
-  p <- ggplot(data = mdf, aes(x = m2, y = m3, colour = factor(m1))) +
-    geom_line(aes(linewidth = 1)) +
-    guides(linewidth = FALSE)
-
-  return(p)
-}
+# ============================================================================ #
+# NOTE: Transformation functions (slog, inv_slog, reflect_slog, etc.)
+# are now loaded from globals.R - duplicate definitions removed
+# ============================================================================ #
 
 # Helper function to select colors for dendrogram branches
 select_extremes <- function(group, k_clusters) {
@@ -287,8 +128,8 @@ cat("Training data loaded:", nrow(trigeminale_training_data), "samples\n")
 
 # Extract variables for clustering
 variables_for_clustering_imputed <- trigeminale_training_data[,
-  c(variables_by_categories$Nasal_chemosensory_perception,
-    variables_by_categories$Psychophysical_measurements[c(1, 2, 4)])]
+                                                              c(variables_by_categories$Nasal_chemosensory_perception,
+                                                                variables_by_categories$Psychophysical_measurements[c(1, 2, 4)])]
 rownames(variables_for_clustering_imputed) <- trigeminale_training_data$ID
 
 # Load validation data (imputed)
@@ -298,8 +139,8 @@ cat("Validation data loaded:", nrow(trigeminale_validation_data), "samples\n")
 
 # Extract variables for clustering (validation)
 variables_for_clustering_imputed_validation <- trigeminale_validation_data[,
-  c(variables_by_categories$Nasal_chemosensory_perception,
-    variables_by_categories$Psychophysical_measurements[c(1, 2, 4)])]
+                                                                           c(variables_by_categories$Nasal_chemosensory_perception,
+                                                                             variables_by_categories$Psychophysical_measurements[c(1, 2, 4)])]
 rownames(variables_for_clustering_imputed_validation) <- trigeminale_validation_data$ID
 
 # Load raw data (for reference)
@@ -324,9 +165,9 @@ variables_for_clustering_imputed$`AmmoLa intensity` <-
 variables_for_clustering_imputed$`CO2 threshold` <-
   scaleRange_01(-slog(variables_for_clustering_imputed$`CO2 threshold`)) * 3
 
-# Lateralization: negative slog (lower = more sensitive)
+# Lateralization: none
 variables_for_clustering_imputed$`Lateralization (x/20)` <-
-  scaleRange_01(-slog(variables_for_clustering_imputed$`Lateralization (x/20)`)) * 3
+  scaleRange_01(variables_for_clustering_imputed$`Lateralization (x/20)`) * 3
 
 # Transform psychophysical variables (validation)
 variables_for_clustering_imputed_validation$`AmmoLa intensity` <-
@@ -336,7 +177,7 @@ variables_for_clustering_imputed_validation$`CO2 threshold` <-
   scaleRange_01(-slog(variables_for_clustering_imputed_validation$`CO2 threshold`)) * 3
 
 variables_for_clustering_imputed_validation$`Lateralization (x/20)` <-
-  scaleRange_01(-slog(variables_for_clustering_imputed_validation$`Lateralization (x/20)`)) * 3
+  scaleRange_01(variables_for_clustering_imputed_validation$`Lateralization (x/20)`) * 3
 
 cat("Variables transformed to [0, 3] scale\n")
 
@@ -367,6 +208,7 @@ heat_matrix <- variables_for_clustering_imputed %>%
   rename(AmmoLa_intensity_transformed = `AmmoLa intensity`,
          CO2_threshold_transformed = `CO2 threshold`)
 
+write.csv(heat_matrix, "heat_matrix_trig_for_clustering.csv")
 heat_matrix_validation <- variables_for_clustering_imputed_validation %>%
   rename(AmmoLa_intensity_transformed = `AmmoLa intensity`,
          CO2_threshold_transformed = `CO2 threshold`)
@@ -411,8 +253,8 @@ print(DescTools::AndersonDarlingTest(row_means_validation, "pnorm",
 # Compare training vs validation distributions
 cat("\nComparing training vs validation distributions...\n")
 ad_result <- twosamples::ad_test(row_means, row_means_validation)
+print(ad_result)
 ad_p <- ad_result["P-Value"]
-cat("Anderson-Darling test p-value:", format(ad_p, scientific = FALSE, digits = 3), "\n")
 
 # Visualization of distribution comparison
 df_row_means <- rbind.data.frame(
@@ -422,8 +264,8 @@ df_row_means <- rbind.data.frame(
 
 p_GMM_row_means <- ggplot(df_row_means, aes(x = values, color = Data, fill = Data)) +
   geom_density(alpha = 0.2, size = 1) +
-  scale_fill_manual(values = c("cornsilk2", "cornsilk4")) +
-  scale_color_manual(values = c("cornsilk2", "cornsilk4")) +
+  scale_fill_manual(values = c(actual_palette[2], actual_palette[4])) +
+  scale_color_manual(values = c(actual_palette[2], actual_palette[4])) +
   labs(title = "Row means of trigeminal measures matrix",
        subtitle = "Training versus validation",
        x = "Means", y = "Density") +
@@ -432,7 +274,7 @@ p_GMM_row_means <- ggplot(df_row_means, aes(x = values, color = Data, fill = Dat
         legend.direction = "vertical") +
   annotate("text", x = Inf, y = Inf,
            label = paste0("Anderson-Darling test\np = ",
-                         format(ad_p, scientific = FALSE, digits = 2)),
+                          format(ad_p, scientific = FALSE, digits = 2)),
            hjust = 1.1, vjust = 1.1, size = 3.5,
            color = "#444444", family = "Libre Franklin",
            fontface = "plain")
@@ -443,15 +285,72 @@ print(p_GMM_row_means)
 ggsave("p_GMM_row_means.svg", p_GMM_row_means, width = 8, height = 8, dpi = 300)
 ggsave("p_GMM_row_means.png", p_GMM_row_means, width = 8, height = 8, dpi = 300)
 
+parallel::mccollect(wait = TRUE)
+Sys.sleep(3)
+
 # ============================================================================ #
 # 7. PROJECTION AND CLUSTERING ANALYSIS
 # ============================================================================ #
 
+# Create permuted datasets
+
+create_permuted_datasets <- function(data, n_datasets, seed_start = 42,
+                                     base_name = "variables_nasal_chemosensory_perception_for_clustering_imputed_renamed_prepared_permuted",
+                                     permutation = "varwise") {
+  perm_cols <- names(data)[!names(data) %in% c("Target", "Label")]
+
+  permuted_names <- character(0)
+
+  for (i in 1:n_datasets) {
+    current_seed <- i * (seed_start + i - 1)
+    set.seed(current_seed)
+
+    if (permutation == "complete") {
+      permuted_data <- data
+      permuted_data[perm_cols] <-
+        as.data.frame(matrix(sample(as.vector(unlist(permuted_data[perm_cols]))), nrow = nrow(permuted_data[perm_cols]), ncol = ncol(permuted_data[perm_cols])))
+      names(permuted_data) <- names(data)
+    } else {
+      permuted_data <- data
+      permuted_data[perm_cols] <- lapply(permuted_data[perm_cols], sample)
+    }
+    custom_name <- paste0(base_name, "_", i)
+    assign(custom_name, permuted_data, envir = .GlobalEnv)
+
+    permuted_names <- c(permuted_names, custom_name)
+    cat(sprintf("✓ Created: %s\n", custom_name))
+  }
+
+  cat(sprintf("\n✅ All %d permuted datasets created and assigned to global environment!\n", n_datasets))
+
+  return(permuted_names)
+}
+
+permuted_names_1 <- create_permuted_datasets(
+  data = variables_nasal_chemosensory_perception_for_clustering_imputed_renamed_prepared,
+  n_datasets = 3,
+  seed_start = 42,
+  base_name = "variables_nasal_chemosensory_perception_for_clustering_imputed_renamed_prepared_permuted_var"
+)
+
+permuted_names_2 <- create_permuted_datasets(
+  variables_nasal_chemosensory_perception_for_clustering_imputed_renamed_prepared,
+  n_datasets = 3,
+  seed_start = 42,
+  base_name = "variables_nasal_chemosensory_perception_for_clustering_imputed_renamed_prepared_permuted_comp",
+  permutation = "complete"
+)
+
+DatasetNames <- c(
+  "variables_nasal_chemosensory_perception_for_clustering_imputed_renamed_prepared",
+  # permuted_names_1,
+  permuted_names_2
+)
+
+
 cat("\n=== Performing Projection and Clustering Analysis ===\n")
 cat("This may take several minutes...\n")
 
-# Set dataset names for analysis
-DatasetNames <- c("variables_nasal_chemosensory_perception_for_clustering_imputed_renamed_prepared")
 
 # Set seed for reproducibility
 set.seed(42)
@@ -466,14 +365,17 @@ projectionsAndPlots_TriFunQ <- perform_analysis(
   label_points = FALSE,
   highlight_misclassified = FALSE,
   selected_cluster_metrics = unsupervised_metrics_full,
-  highlight_best_clustering = TRUE,
+  highlight_best_clustering = FALSE,
   palette_target = cb_palette,
   palette_cluster = cb_palette,
   seed = 42,
   cells_colored_for = "Cluster",
   points_colored_for = "Cluster",
   nProc = max(1, min(nProc_desired, nProc_possible)),
-  max_clusters = 5
+  n_clusters = 2,
+  max_clusters = 5,
+  scaleX = TRUE,
+  doEDOtrans = TRUE
 )
 
 cat("Analysis complete!\n")
@@ -488,150 +390,211 @@ cat("Analysis complete!\n")
 
 cat("\n=== Creating Combined Projection Plots ===\n")
 
-# Combine all projection plots into single figure
+lapply(DatasetNames, function(Dataset) {
 
-# remove plots with projection = "none" (makes no sense to plot variables 1 and 2)
+  # Combine all projection plots into single figure
 
-no_none_projection_plots <- as.numeric(strsplit(paste(setdiff(1:length(names(projectionsAndPlots_TriFunQ$projections_plots$variables_nasal_chemosensory_perception_for_clustering_imputed_renamed_prepared))
-                                    , grep("none", names(projectionsAndPlots_TriFunQ$projections_plots$variables_nasal_chemosensory_perception_for_clustering_imputed_renamed_prepared))
-), collapse = ","), ",")[[1]])
+  # remove plots with projection = "none" (makes no sense to plot variables 1 and 2)
 
-combined_plots <- combine_all_plots(
-  datasets = DatasetNames,
-  projection_plots = projectionsAndPlots_TriFunQ$projections_plots$variables_nasal_chemosensory_perception_for_clustering_imputed_renamed_prepared[no_none_projection_plots],
-  projection_methods = projection_methods[projection_methods != "none"],
-  clustering_methods = clustering_methods,
-  cluster_number_methods = cluster_number_methods
-)
+  no_none_projection_plots <- as.numeric(strsplit(paste(setdiff(1:length(names(projectionsAndPlots_TriFunQ$projections_plots[[Dataset]]))
+                                                                , grep("none", names(projectionsAndPlots_TriFunQ$projections_plots[[Dataset]]))
+  ), collapse = ","), ",")[[1]])
 
-print(combined_plots)
-# Apply title updates
-original_plots_updated <- update_plot_titles(original_plots, title_size = 12, wrap_chars = 15)
+  # Apply title updates BEFORE combining
+  original_plots_updated <- update_plot_titles(
+    projectionsAndPlots_TriFunQ$projections_plots,
+    title_size = 12,
+    wrap_chars = 15
+  )
 
-# Recombine with updated titles
-combined_plots_fixed <- combine_all_plots(
-  datasets = DatasetNames,
-  projection_plots = original_plots_updated$variables_nasal_chemosensory_perception_for_clustering_imputed_renamed_prepared[no_none_projection_plots],
-  projection_methods = projection_methods[projection_methods != "none"],
-  clustering_methods = clustering_methods,
-  cluster_number_methods = cluster_number_methods
-)
+  # Recombine with updated titles
+  combined_plots_fixed <- combine_all_plots(
+    datasets = Dataset,
+    projection_plots = original_plots_updated[[Dataset]][no_none_projection_plots],
+    projection_methods = projection_methods[projection_methods != "none"],
+    clustering_methods = clustering_methods,
+    cluster_number_methods = c("NbClust") # Only NbClust derived cluster numbers, not fixed, else set to cluster_number_methods,
+  )
 
+  print(combined_plots_fixed)
 
-# Add title above (cowplot style)
-combined_plots_fixed_title <- cowplot::plot_grid(
-  ggplot() +
-    labs(title = "Comprehensive combinations of projection and clustering methods.",
-         subtitle = "Rows: Projection Methods, Columns: Clustering Methods;\nLabelling: Projection method - clustering method - cluster number detection method (always NbClust)") +
-    theme_void() +
-    theme(plot.title = element_text(size = 25, face = "plain", margin = margin(b = 4)),
-          plot.subtitle = element_text(size = 20, face = "plain", margin = margin(b = 1))),
-  combined_plots_fixed$variables_nasal_chemosensory_perception_for_clustering_imputed_renamed_prepared,
-  ncol = 1,
-  rel_heights = c(0.05, 1),
-  align = "v"
-)
+  # Add title above (cowplot style)
+  combined_plots_fixed_title <- cowplot::plot_grid(
+    ggplot() +
+      labs(title = "Comprehensive combinations of projection and clustering methods.",
+           subtitle = "Rows: Projection Methods, Columns: Clustering Methods;\nLabelling: Projection method - clustering method - cluster number detection method (always NbClust)") +
+      theme_void() +
+      theme(plot.title = element_text(size = 25, face = "plain", margin = ggplot2::margin(b = 4)),
+            plot.subtitle = element_text(size = 20, face = "plain", margin = ggplot2::margin(b = 1))),
+    combined_plots_fixed[[Dataset]],
+    ncol = 1,
+    rel_heights = c(0.05, 1),
+    align = "v"
+  )
 
-print(combined_plots_fixed_title)
+  print(combined_plots_fixed_title)
 
-# Save combined plot
-ggsave(
-  filename = paste0("Combined_projection_and_clustering_analysis_plot_",
-                    cluster_number_methods, "_clusters_", DatasetNames[1], ".svg"),
-  plot = combined_plots_fixed_title,
-  width = 4 * (length(clustering_methods) + length(cluster_number_methods)),
-  height = 4.5 * length(projection_methods[projection_methods != "none"]),
-  limitsize = FALSE
-)
-ggsave(
-  filename = paste0("Combined_projection_and_clustering_analysis_plot_",
-                    cluster_number_methods, "_clusters_", DatasetNames[1], ".png"),
-  plot = combined_plots_fixed_title,
-  width = 4 * (length(clustering_methods) + length(cluster_number_methods)),
-  height = 4.5 * length(projection_methods[projection_methods != "none"]),
-  limitsize = FALSE,
-  dpi = 300
-)
+  # Save combined plot
+  ggsave(
+    filename = paste0("Combined_projection_and_clustering_analysis_plot_",
+                      cluster_number_methods, "_clusters_", Dataset, ".svg"),
+    plot = combined_plots_fixed_title,
+    width = 4 * (length(clustering_methods) + length(cluster_number_methods)),
+    height = 4.5 * length(projection_methods[projection_methods != "none"]),
+    limitsize = FALSE
+  )
+  ggsave(
+    filename = paste0("Combined_projection_and_clustering_analysis_plot_",
+                      cluster_number_methods, "_clusters_", Dataset, ".png"),
+    plot = combined_plots_fixed_title,
+    width = 4 * (length(clustering_methods) + length(cluster_number_methods)),
+    height = 4.5 * length(projection_methods[projection_methods != "none"]),
+    limitsize = FALSE,
+    dpi = 300
+  )
+})
 
 cat("Combined projection plot saved\n")
+
 
 # ============================================================================ #
 # 9. CLUSTER QUALITY EVALUATION
 # ============================================================================ #
+# Check Hopkins statistic
+
+cat("\n=== Checking Hopkins values on all clustered datasets ===\n")
+
+library("hopkins")
+
+DataHopkins <- lapply(DatasetNames, function(Dataset) {
+  Hopkins_vals <- lapply(projection_methods, function(projection_method) {
+    # Extract projected data
+    DataH <- projectionsAndPlots_TriFunQ$projection_results[[Dataset]][[projection_method]]$Projected
+    hopkinsvals <- sapply(1:100, function(s) {
+      set.seed(s)
+      hopkins::hopkins(DataH)
+    })
+    hopkinsvals
+  })
+  names(Hopkins_vals) <- projection_methods
+  Hopkins_vals
+})
+
+names(DataHopkins) <- DatasetNames
+
+df_all_Hopkins <- do.call(rbind, lapply(names(DataHopkins), function(top_name) {
+  inner <- DataHopkins[[top_name]]
+
+  do.call(rbind, lapply(names(inner), function(method) {
+    data.frame(
+      variable = top_name,
+      method = method,
+      id = seq_along(inner[[method]]),
+      value = inner[[method]]
+    )
+  }))
+}))
+
+p_Hopkins <- ggplot(df_all_Hopkins, aes(x = interaction(method, variable), y = value)) +
+  geom_boxplot(fill = ggplot2::alpha(actual_palette[1], 0.3)) +
+  theme_plot() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  labs(title = "Hopkins values for all clustered data", subtitle = "Projection:dataset")
+
+print(p_Hopkins)
+
+# Save combined Hopkins plot
+ggsave("p_Hopkins.svg", p_Hopkins,
+       width = 18, height = 18, dpi = 300, bg = "white")
+ggsave("p_Hopkins.png", p_Hopkins,
+       width = 18, height = 18, dpi = 300, bg = "white")
+
+cat("Combined Hopkins plot saved\n")
+
+
 
 cat("\n=== Evaluating Cluster Quality ===\n")
 
-# Extract cluster quality results
-dfClusterQuality <- projectionsAndPlots_TriFunQ$cluster_quality_results$variables_nasal_chemosensory_perception_for_clustering_imputed_renamed
+ClusterQuality <- lapply(DatasetNames, function(Dataset) {
 
-# Remove metrics not used in current analysis
-excluded_metrics <- setdiff(valid_cluster_metrics, "CalinskiHarabasz_index")
-excluded_metrics <- setdiff(valid_cluster_metrics, unsupervised_metrics_full)
+  # Extract cluster quality results
+  dfClusterQuality <- projectionsAndPlots_TriFunQ$cluster_quality_results[[Dataset]]
 
-dfClusterQuality <- dfClusterQuality[, !names(dfClusterQuality) %in%
-                                       c(excluded_metrics,
-                                         paste0(excluded_metrics, "_rank"),
-                                         "combined_rank_metrics_with_orig_classes",
-                                         "combined_rank")]
+  # Remove metrics not used in current analysis
+  excluded_metrics <- setdiff(valid_cluster_metrics, "CalinskiHarabasz_index")
+  # excluded_metrics <- setdiff(unsupervised_metrics_full, unsupervised_metrics_reduced)
 
-# Calculate combined rank score (product of individual ranks)
-dfClusterQuality <- dfClusterQuality %>%
-  rownames_to_column(var = "row_id") %>%
-  rowwise() %>%
-  mutate(
-    combined_rank_metrics_without_orig_classes = {
-      rank_cols <- grep("_rank$", names(cur_data()), value = TRUE)
-      if (length(rank_cols) == 0) {
-        return(NA_real_)
-      }
-      prod(as.numeric(cur_data()[1, rank_cols, drop = FALSE]), na.rm = TRUE)
+  dfClusterQuality <- dfClusterQuality[, !names(dfClusterQuality) %in%
+                                         c(excluded_metrics,
+                                           paste0(excluded_metrics, "_rank"),
+                                           "combined_rank_metrics_with_orig_classes",
+                                           "combined_rank")]
+
+  # Calculate combined rank score (product of individual ranks)
+  dfClusterQuality <- dfClusterQuality %>%
+    rownames_to_column(var = "row_id") %>%
+    rowwise() %>%
+    mutate(
+      combined_rank_metrics_without_orig_classes = {
+    rank_cols <- grep("_rank$", names(cur_data()), value = TRUE)
+    if (length(rank_cols) == 0) {
+      return(NA_real_)
     }
-  ) %>%
-  ungroup() %>%
-  column_to_rownames(var = "row_id")
+    prod(as.numeric(cur_data()[1, rank_cols, drop = FALSE]), na.rm = TRUE)
+  }
+    ) %>%
+    ungroup() %>%
+    column_to_rownames(var = "row_id")
 
-# Generate unique method identifiers
-rownames(dfClusterQuality) <- apply(dfClusterQuality[, 1:3], 1, paste0, collapse = "_")
-dfClusterQuality$Method <- row.names(dfClusterQuality)
+  # Generate unique method identifiers
+  rownames(dfClusterQuality) <- apply(dfClusterQuality[, 1:3], 1, paste0, collapse = "_")
+  dfClusterQuality$Method <- row.names(dfClusterQuality)
 
-# Sort by best overall performance (highest rank product)
-dfClusterQuality <- dfClusterQuality[order(-dfClusterQuality$combined_rank_metrics_without_orig_classes), ]
+  # Sort by best overall performance (highest rank product)
+  dfClusterQuality <- dfClusterQuality[order(-dfClusterQuality$combined_rank_metrics_without_orig_classes),]
 
-cat("Best clustering method:", rownames(dfClusterQuality)[1], "\n")
-cat("Combined rank score:", dfClusterQuality$combined_rank_metrics_without_orig_classes[1], "\n")
+  cat("Best clustering method:", rownames(dfClusterQuality)[1], "\n")
+  cat("Combined rank score:", dfClusterQuality$combined_rank_metrics_without_orig_classes[1], "\n")
 
-# Visualize cluster quality rankings as heatmap
-heatmap_data <- melt(toPercent(dfClusterQuality[, grep("_rank", names(dfClusterQuality))]))
-colnames(heatmap_data) <- c("row", "column", "value")
-heatmap_data$row <- forcats::fct_rev(as.factor(heatmap_data$row))
+  # Visualize cluster quality rankings as heatmap
+  heatmap_data <- melt(to_percent(dfClusterQuality[, grep("_rank", names(dfClusterQuality))]))
+  colnames(heatmap_data) <- c("row", "column", "value")
+  heatmap_data$row <- forcats::fct_rev(as.factor(heatmap_data$row))
 
-clustering_heatmap <- ggplot(heatmap_data, aes(x = column, y = row, fill = value)) +
-  geom_tile() +
-  scale_fill_gradientn(colors = c("cornsilk", "cornsilk4")) +
-  theme_plot() +
-  theme(
-    legend.position.inside = TRUE, legend.position = c(0.2, 0.2),
-    legend.background = element_rect(fill = ggplot2::alpha("white", 0.6), color = NA),
-    axis.text.x = element_text(size = 8, angle = 90, hjust = 1, vjust = 0.5),
-    axis.text.y = element_text(size = 6)
-  ) +
-  labs(title = "Ranked cluster quality scores", fill = "Scaled\nrank",
-       y = "Projection_clustering_clusternumber", x = NULL)
+  clustering_heatmap <- ggplot(heatmap_data, aes(x = column, y = row, fill = value)) +
+    geom_tile() +
+    scale_fill_gradientn(colors = c(actual_palette[1], actual_palette[4])) +
+    theme_plot() +
+    theme(
+      legend.position.inside = TRUE, legend.position = c(0.2, 0.2),
+      legend.background = element_rect(fill = ggplot2::alpha("white", 0.6), color = NA),
+      axis.text.x = element_text(size = 8, angle = 90, hjust = 1, vjust = 0.5),
+      axis.text.y = element_text(size = 6)
+    ) +
+    labs(title = "Ranked cluster quality scores", fill = "Scaled\nrank",
+         y = "Projection_clustering_clusternumber", x = NULL)
 
-print(clustering_heatmap)
+  print(clustering_heatmap)
 
-# Bar plot of combined rank scores
-ggplot(dfClusterQuality, aes(y = combined_rank_metrics_without_orig_classes,
-                              x = reorder(Method, -combined_rank_metrics_without_orig_classes))) +
-  geom_bar(stat = "identity") +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0, hjust = 1))
+  # Bar plot of combined rank scores
+  ggplot(dfClusterQuality, aes(y = combined_rank_metrics_without_orig_classes,
+                               x = reorder(Method, - combined_rank_metrics_without_orig_classes))) +
+    geom_bar(stat = "identity") +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0, hjust = 1))
 
-# Save cluster quality results
-dfClusterQuality[] <- lapply(dfClusterQuality, function(x) {
-  if (is.numeric(x)) round(x, 3) else x
+  # Save cluster quality results
+  dfClusterQuality[] <- lapply(dfClusterQuality, function(x) {
+    if (is.numeric(x)) round(x, 3) else x
+  })
+  write.csv(dfClusterQuality, paste0("dfClusterQuality_", Dataset, ".csv"), row.names = TRUE)
+  cat(paste0("Cluster quality metrics saved to dfClusterQuality_", Dataset, ".csv\n"))
+
+  return(list(dfClusterQuality = dfClusterQuality,
+              clustering_heatmap = clustering_heatmap))
+
 })
-write.csv(dfClusterQuality, "dfClusterQuality.csv", row.names = TRUE)
-cat("Cluster quality metrics saved to dfClusterQuality.csv\n")
+
+names(ClusterQuality) <- DatasetNames
 
 # ============================================================================ #
 # 10. EXTRACT BEST CLUSTERING SOLUTION
@@ -640,9 +603,10 @@ cat("Cluster quality metrics saved to dfClusterQuality.csv\n")
 cat("\n=== Extracting Best Clustering Solution ===\n")
 
 # Extract best methods from quality evaluation
-best_projection_method <- dfClusterQuality$projection_method[1]
-best_clustering_method <- dfClusterQuality$clustering_method[1]
-best_cluster_number_method <- dfClusterQuality$cluster_number_method[1]
+best_projection_method <- ClusterQuality$variables_nasal_chemosensory_perception_for_clustering_imputed_renamed_prepared$dfClusterQuality$projection_method[1]
+best_clustering_method <- ClusterQuality$variables_nasal_chemosensory_perception_for_clustering_imputed_renamed_prepared$dfClusterQuality$clustering_method[1]
+best_cluster_number_method <- ClusterQuality$variables_nasal_chemosensory_perception_for_clustering_imputed_renamed_prepared$dfClusterQuality$cluster_number_method[1]
+# best_cluster_number_method <- "none"
 
 cat("Best projection method:", best_projection_method, "\n")
 cat("Best clustering method:", best_clustering_method, "\n")
@@ -664,8 +628,39 @@ analysis_training_instances <- projectionsAndPlots_TriFunQ$clustering_results$va
 
 cat("Number of instances:", length(TriFunQ_clusters), "\n")
 
+res <- lapply(ClusterQuality, function(x) {
+  df <- x$dfClusterQuality
+  data.frame(
+    rowname = rownames(df),
+    CalinskiHarabasz_index = df$CalinskiHarabasz_index,
+    row.names = NULL
+  )
+})
+
+
+# Check Cluster quality across datasets
+library(dplyr)
+
+combined_df <- bind_rows(res, .id = "source") %>%
+  arrange(desc(CalinskiHarabasz_index))
+
+
+cat("Best cluster sulutions:", "\n")
+write.csv(combined_df, "combined_cluster_indices.csv")
+print(head(combined_df, 20))
+
+
+
 # ============================================================================ #
-# 11. AGREEMENT WITH AmmoLA GROUPING (FISHER'S EXACT TEST)
+# 11. CHECK UMATRIX SOLUTION
+# ============================================================================ #
+
+# Umatrix::iEsomTrain(as.matrix(variables_nasal_chemosensory_perception_for_clustering_imputed_renamed_prepared[
+#   !names(variables_nasal_chemosensory_perception_for_clustering_imputed_renamed_prepared) %in% c("Target", "Label")]))
+
+
+# ============================================================================ #
+# 12. AGREEMENT WITH AmmoLA GROUPING (FISHER'S EXACT TEST)
 # ============================================================================ #
 
 cat("\n=== Testing Agreement with AmmoLA Grouping ===\n")
@@ -705,7 +700,7 @@ p_table_AmmoLa_vs_TriFunQ_clusters <- ggplot(
 ) +
   geom_tile(color = "black") +
   geom_text(aes(label = Freq), color = "black", size = 6) +
-  scale_fill_gradient(low = "cornsilk1", high = "cornsilk4") +
+  scale_fill_gradient(low = actual_palette[1], high = actual_palette[4]) +
   theme_minimal() +
   labs(
     title = "AmmoLa grouping vs TriFunQ clusters",
@@ -747,7 +742,7 @@ sil_train <- silhouette(projectionsAndPlots_TriFunQ$clustering_results$variables
 sil_df_train <- as.data.frame(sil_train)
 sil_df_train$case <- as.numeric(rownames(sil_df_train))
 sil_df_train <- sil_df_train %>%
-  arrange(cluster, -sil_width) %>%
+  arrange(cluster, - sil_width) %>%
   mutate(id = row_number())
 
 # Create silhouette plot
@@ -759,7 +754,7 @@ p_TriFunQ_clusters_silhouette <- ggplot(sil_df_train, aes(x = id, y = sil_width,
   theme_plot() +
   scale_fill_manual(values = select_extremes(c(dark_colors, "grey31"), k_clusters)) +
   theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(),
-        legend.position = "none", strip.background = element_rect(fill = "cornsilk2")) +
+        legend.position = "none", strip.background = element_rect(fill = actual_palette[2])) +
   geom_hline(yintercept = 0, color = "black", linetype = "solid")
 
 print(p_TriFunQ_clusters_silhouette)
@@ -827,7 +822,7 @@ names(variables_nasal_chemosensory_perception_for_clustering_imputed_renamed_val
 
 # Extract training data (without Target and Label columns)
 train_projection_data <- variables_nasal_chemosensory_perception_for_clustering_imputed_renamed_prepared[,
-  !names(variables_nasal_chemosensory_perception_for_clustering_imputed_renamed_prepared) %in% c("Target", "Label")]
+                                                                                                         !names(variables_nasal_chemosensory_perception_for_clustering_imputed_renamed_prepared) %in% c("Target", "Label")]
 
 # Perform projection on training data
 train_result_projection <- performProjection(X = train_projection_data,
@@ -841,44 +836,44 @@ valid_result_projection <- performProjection(X = train_projection_data,
                                              projection_object = train_model,
                                              newdata = valid_projection_data)
 
+# Function to assign new points to nearest cluster center
+assign_to_nearest_cluster <- function(new_points, cluster_centers) {
+  apply(new_points, 1, function(point) {
+    which.min(apply(cluster_centers, 1, function(center) {
+      sum((point - center) ^ 2)
+    }))
+  })
+}
+
+# Compute cluster centers in the training projection space from the original
+# TriFunQ_clusters labels (avoids label switching caused by re-running clustering)
+compute_cluster_centers <- function(projection_coords, cluster_labels) {
+  sorted_labels <- sort(unique(cluster_labels))
+  centers <- do.call(rbind, lapply(sorted_labels, function(cl) {
+    colMeans(projection_coords[cluster_labels == cl, , drop = FALSE])
+  }))
+  rownames(centers) <- sorted_labels
+  centers
+}
+
 # Apply clustering to validation data
 if (best_clustering_method == "kmeans") {
-  # K-means: fit to training, assign validation to nearest centers
   cat("Using k-means clustering...\n")
-  set.seed(42)
-  clusters_train <- kmeans(valid_result_projection$projection_object$embedding,
-                          centers = length(unique(TriFunQ_clusters)), nstart = 100)
-
-  # Function to assign new points to nearest cluster
-  assign_to_nearest_cluster <- function(new_points, cluster_centers) {
-    apply(new_points, 1, function(point) {
-      which.min(apply(cluster_centers, 1, function(center) {
-        sum((point - center)^2)
-      }))
-    })
-  }
-
+  # Use original TriFunQ_clusters to avoid label switching from re-running k-means
+  clusters_train <- TriFunQ_clusters
+  cluster_centers_train <- compute_cluster_centers(train_result_projection$Projected,
+                                                   clusters_train)
   clusters_val <- assign_to_nearest_cluster(valid_result_projection$Projected,
-                                            clusters_train$centers)
-  clusters_train <- clusters_train$cluster
+                                            cluster_centers_train)
 
 } else {
-  # Hierarchical clustering: fit to training, assign validation to nearest centers
+  # Hierarchical clustering: use original TriFunQ_clusters to avoid label switching
   cat("Using hierarchical clustering...\n")
-  set.seed(42)
-  dist_matrix_train <- dist(train_result_projection$Projected, method = "euclidean")
-  hclust_train <- hclust(dist_matrix_train, method = best_clustering_method)
-  clusters_train <- cutree(hclust_train, k = length(unique(TriFunQ_clusters)))
-
-  # Extract cluster centers
-  cluster_centers_hclust <- tapply(train_result_projection$Projected,
-                                   list(clusters_train),
-                                   colMeans)
-  cluster_centers_hclust <- do.call(rbind, cluster_centers_hclust)
-
-  # Assign validation to nearest centers
+  clusters_train <- TriFunQ_clusters
+  cluster_centers_train <- compute_cluster_centers(train_result_projection$Projected,
+                                                   clusters_train)
   clusters_val <- assign_to_nearest_cluster(valid_result_projection$Projected,
-                                           cluster_centers_hclust)
+                                            cluster_centers_train)
 }
 
 # Display cluster sizes
@@ -901,8 +896,12 @@ sil_val <- silhouette(clusters_val, diss_matrix_val)
 sil_df_val <- as.data.frame(sil_val)
 sil_df_val$case <- as.numeric(rownames(sil_df_val))
 sil_df_val <- sil_df_val %>%
-  arrange(cluster, -sil_width) %>%
+  arrange(cluster, - sil_width) %>%
   mutate(id = row_number())
+
+# Calinski- harabasz index
+CH_val <- calculate_calinski_harabasz_index(valid_result_projection$Projected, clusters_val)
+
 
 p_validation_clusters_silhouette <- ggplot(sil_df_val,
                                            aes(x = id, y = sil_width, fill = as.factor(cluster))) +
@@ -913,23 +912,13 @@ p_validation_clusters_silhouette <- ggplot(sil_df_val,
   theme_plot() +
   scale_fill_manual(values = select_extremes(c(dark_colors, "grey31"), k_clusters)) +
   theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(),
-        legend.position = "none", strip.background = element_rect(fill = "cornsilk2")) +
+        legend.position = "none", strip.background = element_rect(fill = actual_palette[2])) +
   geom_hline(yintercept = 0, color = "black", linetype = "solid")
 
 print(p_validation_clusters_silhouette)
 
 # B. Dendrogram (for hierarchical methods)
 if (best_clustering_method %in% c("ward.D2", "single", "average", "median", "complete", "centroid")) {
-
-  select_extremes <- function(group, k_clusters) {
-    n_items <- length(group)
-    if (n_items <= k_clusters) {
-      return(group)
-    } else {
-      positions <- seq(1, n_items, length.out = k_clusters)
-      return(group[round(positions)])
-    }
-  }
 
   hc <- hclust(diss_matrix_val, method = best_clustering_method)
   require(magrittr)
@@ -981,6 +970,10 @@ df_projected_val <- data.frame(
   valid_result_projection$Projected
 )
 
+table(clusters_val)
+round(table(clusters_val) / sum(table(clusters_val)) *100, 1)
+
+
 p_validation_clusters_scatter <- ggplot(df_projected_val,
                                         aes(x = Dim1, y = Dim2, shape = as.factor(Target),
                                             fill = as.factor(Target), color = as.factor(Target))) +
@@ -1017,15 +1010,24 @@ print(p_silhouette_comparison)
 cat("Creating combined diagnostic plot...\n")
 
 # Top row: training diagnostics
-top_r <- (p_TriFunQ_clusters_dend + theme(plot.margin = margin(5, 5, 5, 5))) |
-  (p_TriFunQ_clusters_silhouette + theme(plot.margin = margin(5, 5, 5, 5))) |
-  (p_TriFunQ_clusters_scatter + theme(plot.margin = margin(5, 5, 5, 5)))
+if (best_clustering_method %in% c("ward.D2", "single", "average", "median", "complete", "centroid")) {
+  top_r <- (p_TriFunQ_clusters_dend + ggplot2::theme(plot.margin = ggplot2::margin(5, 5, 5, 5))) |
+    (p_TriFunQ_clusters_silhouette + ggplot2::theme(plot.margin = ggplot2::margin(5, 5, 5, 5))) |
+    (p_TriFunQ_clusters_scatter + ggplot2::theme(plot.margin = ggplot2::margin(5, 5, 5, 5)))
 
-# Bottom row: validation diagnostics
-bottom_r <- (p_TriFunQ_clusters_dend_valid + theme(plot.margin = margin(5, 5, 5, 5))) |
-  (p_validation_clusters_silhouette + theme(plot.margin = margin(5, 5, 5, 5))) |
-  (p_validation_clusters_scatter + theme(plot.margin = margin(5, 5, 5, 5)))
+  # Bottom row: validation diagnostics
+  bottom_r <- (p_TriFunQ_clusters_dend_valid + ggplot2::theme(plot.margin = ggplot2::margin(5, 5, 5, 5))) |
+    (p_validation_clusters_silhouette + ggplot2::theme(plot.margin = ggplot2::margin(5, 5, 5, 5))) |
+    (p_validation_clusters_scatter + ggplot2::theme(plot.margin = ggplot2::margin(5, 5, 5, 5)))
 
+} else {
+  top_r <- (p_TriFunQ_clusters_silhouette + ggplot2::theme(plot.margin = ggplot2::margin(5, 5, 5, 5))) |
+    (p_TriFunQ_clusters_scatter + ggplot2::theme(plot.margin = ggplot2::margin(5, 5, 5, 5)))
+
+  # Bottom row: validation diagnostics
+  bottom_r <- (p_validation_clusters_silhouette + ggplot2::theme(plot.margin = ggplot2::margin(5, 5, 5, 5))) |
+    (p_validation_clusters_scatter + ggplot2::theme(plot.margin = ggplot2::margin(5, 5, 5, 5)))
+}
 # Combine with labels
 combined_trig_clustering_plot <- (top_r / bottom_r) +
   plot_layout(heights = c(1, 1)) +
@@ -1038,15 +1040,15 @@ combined_trig_clustering_plot <- (top_r / bottom_r) +
       plot.tag = element_text(face = "bold", size = 16)
     )
   ) &
-  theme(plot.margin = margin(5, 5, 5, 5))
+  ggplot2::theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
 
 print(combined_trig_clustering_plot)
 
 # Save combined diagnostic plot
 ggsave("combined_trig_clustering_plot.svg", combined_trig_clustering_plot,
-       width = 18, height = 12, dpi = 300, bg = "white")
+       width = 18, height = 18, dpi = 300, bg = "white")
 ggsave("combined_trig_clustering_plot.png", combined_trig_clustering_plot,
-       width = 18, height = 12, dpi = 300, bg = "white")
+       width = 18, height = 18, dpi = 300, bg = "white")
 
 cat("Combined diagnostic plot saved\n")
 
@@ -1130,7 +1132,7 @@ eta_squared <- function(data) {
 #' @param data Data frame with 'value' and 'Cluster' columns
 #' @param R Number of bootstrap iterations (default: 200)
 #' @return Vector with lower and upper 95% CI bounds
-boot_eta_squared <- function(data, R = 200) {
+boot_eta_squared <- function(data, R = 1000) {
   if (nrow(data) < 20) return(c(NA, NA))
 
   n <- nrow(data)
@@ -1138,7 +1140,7 @@ boot_eta_squared <- function(data, R = 200) {
 
   for (i in 1:R) {
     indices <- sample(n, replace = TRUE)
-    boot_data <- data[indices, ]
+    boot_data <- data[indices,]
     if (nrow(boot_data) >= 10) {
       boot_values[i] <- eta_squared(boot_data)
     }
@@ -1170,8 +1172,7 @@ trigeminal_clustered_training_data <- cbind.data.frame(
 
 trigeminal_clustered_training_data$ID <- trigeminale_training_data$ID
 
-# Transform CO2 threshold (exclude early dataset, negate for direction)
-trigeminal_clustered_training_data$`CO2 threshold`[trigeminal_clustered_training_data$ID <= 549] <- NA
+# Transform CO2 threshold (negate for direction)
 trigeminal_clustered_training_data$`CO2 threshold` <-
   -slog(trigeminal_clustered_training_data$`CO2 threshold`)
 
@@ -1201,7 +1202,6 @@ trigeminal_clustered_validation_data <- cbind.data.frame(
 trigeminal_clustered_validation_data$ID <- trigeminale_validation_data$ID
 
 # Transform variables (same as training)
-trigeminal_clustered_validation_data$`CO2 threshold`[trigeminal_clustered_validation_data$ID <= 549] <- NA
 trigeminal_clustered_validation_data$`CO2 threshold` <-
   -slog(trigeminal_clustered_validation_data$`CO2 threshold`)
 trigeminal_clustered_validation_data$`AmmoLa intensity` <-
@@ -1226,15 +1226,17 @@ datasets <- list(
 cat("Data prepared for", length(unique(trigeminal_clustered_training_data_long$variable)),
     "variables across", k_clusters, "clusters\n")
 
-# Common plotting settings
-dodge_width <- 0.8
-dark_colors <- c("#DDD6B2", "#D2CC9F", "#C8C28C", "#BEB879")
+# Save clustered data
+write.csv(rbind.data.frame(cbind(Set = "Training", trigeminal_clustered_training_data), cbind(Set = "Validation", trigeminal_clustered_validation_data)),
+          file = "trigeminal_clustered_data.csv")
 
-# To be continued...
-# ============================================================================ #
 # ============================================================================ #
 # 17. VISUALIZATION FUNCTIONS FOR VARIABLE ANALYSIS
 # ============================================================================ #
+
+# Common plotting settings
+dodge_width <- 0.8
+# dark_colors <- actual_palette[14:17] #c("#DDD6B2", "#D2CC9F", "#C8C28C", "#BEB879")
 
 cat("\n=== Defining Visualization Functions ===\n")
 
@@ -1248,7 +1250,7 @@ cat("\n=== Defining Visualization Functions ===\n")
 #' @param dataset_name Name of dataset for plot title
 #' @param k_clusters Number of clusters (for positioning calculations)
 #' @return ggplot object
-create_violin_plot <- function(data, dataset_name, k_clusters) {
+create_violin_plot <- function(data, dataset_name, k_clusters, group_label = "Cluster") {
   dodge_width <- 0.8
 
   # Calculate medians for trend lines
@@ -1257,14 +1259,20 @@ create_violin_plot <- function(data, dataset_name, k_clusters) {
     dplyr::summarise(median_value = mean(value, na.rm = TRUE), .groups = "drop")
 
   # Generate dodged x-positions for median lines (0.8, 1.2, 1.6, etc.)
-  positions <- seq(0.8, 0.8 + (k_clusters - 1) * 0.4, by = 0.4)
+  positions <- switch(
+    as.character(k_clusters),
+    "2" = seq(0.8, 0.8 + (k_clusters - 1) * 0.4, by = 0.4),
+    "4" = c(0.7, 0.9, 1.1, 1.3),
+    seq(0.8, 0.8 + (k_clusters - 1) * 0.4, by = 0.4)
+  )
+
   median_data$x_position <- rep(positions, times = n_distinct(data$variable))
 
   ggplot(data, aes(x = variable, y = value, color = Cluster, fill = Cluster)) +
     geom_violin(alpha = 0.05, width = 0.6, position = position_dodge(width = dodge_width)) +
     geom_boxplot(alpha = 0.2, width = 0.3, position = position_dodge(width = dodge_width), outlier.shape = NA) +
     geom_jitter(alpha = 1, size = 0.3,
-                position = position_jitterdodge(jitter.width = 0.1, jitter.height = 0.1, dodge.width = dodge_width)) +
+                position = position_jitterdodge(jitter.width = 0.1, jitter.height = 0, dodge.width = dodge_width)) +
     ggpubr::stat_compare_means(aes(label = paste0("p = ", after_stat(p.format))),
                                label.y.npc = "top", vjust = -0.2, size = 3) +
     geom_line(data = median_data, aes(x = x_position, y = median_value, group = variable),
@@ -1272,19 +1280,18 @@ create_violin_plot <- function(data, dataset_name, k_clusters) {
     facet_wrap(variable ~ ., nrow = 3, scales = "free", labeller = label_wrap_gen(width = 20)) +
     scale_color_manual(values = dark_colors) +
     scale_fill_manual(values = dark_colors) +
-    labs(title = paste("Raw trigeminal data per variable and cluster -", dataset_name),
-         fill = "Cluster", x = NULL) +
+    scale_x_discrete(labels = paste0(1:k_clusters, collapse = "      ")) +
+    labs(title = paste("Raw trigeminal data per variable and", tolower(group_label), "-", dataset_name),
+         fill = group_label, x = group_label) +
     theme_plot() +
     theme(
       legend.direction = "horizontal",
-      legend.position.inside = TRUE, legend.position = c(0.2, 0.2),
+      legend.position.inside = TRUE, legend.position = c(0.2, 0.2), legend.key.height = unit(3, "cm"),
       legend.background = element_rect(fill = ggplot2::alpha("white", 0.6), color = NA),
-      strip.background = element_rect(fill = "cornsilk"),
-      strip.text = element_text(colour = "black", size = 6, face = "plain"),
-      axis.text.x = element_blank(),
-      axis.ticks.x = element_blank()
+      strip.background = element_rect(fill = actual_palette[1]),
+      strip.text = element_text(colour = "black", size = 6, face = "plain")
     ) +
-    guides(color = "none")
+    guides(color = "none", fill = "none")
 }
 
 #' Create Rank-Biserial Effect Size Plot
@@ -1315,9 +1322,14 @@ create_rank_biserial_plot <- function(data, dataset_name) {
     tibble(variable = var, r = r, ci_lower = ci[1], ci_upper = ci[2])
   })
 
+  label_df <- tibble(
+    y = c(-0.5, 0, 0.5),
+    label = c("large", "", "large"),
+    x = -Inf
+  )
   # Create bar plot with error bars
   ggplot(results_rb, aes(x = reorder(variable, r), y = r)) +
-    geom_col(fill = "cornsilk3") +
+    geom_col(fill = actual_palette[3]) +
     geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0.2) +
     coord_flip() +
     labs(title = paste("Rank-biserial correlation (95% CI) -", dataset_name),
@@ -1326,6 +1338,17 @@ create_rank_biserial_plot <- function(data, dataset_name) {
     theme(axis.text.y = element_text(size = 8)) +
     geom_hline(yintercept = c(-0.5, 0, 0.5), linetype = "dashed",
                color = c("salmon", "grey55", "salmon")) +
+    annotate(
+      "text",
+      x = label_df$x,
+      y = label_df$y,
+      label = label_df$label,
+      angle = 90,
+      hjust = -0.2,
+      vjust = 1.2,
+      size = 3.5,
+      color = c("salmon", "grey55", "salmon")
+    ) +
     scale_x_discrete(labels = function(x) stringr::str_wrap(x, width = 35))
 }
 
@@ -1340,7 +1363,6 @@ create_rank_biserial_plot <- function(data, dataset_name) {
 create_eta_plot <- function(data, dataset_name) {
   variables <- unique(data$variable)
 
-  # Calculate eta-squared for each variable
   results_eta <- map_df(variables, function(var) {
     data_var <- data %>% filter(variable == var, !is.na(value))
     if (nrow(data_var) < 10 || length(unique(data_var$Cluster)) < 2) {
@@ -1351,17 +1373,41 @@ create_eta_plot <- function(data, dataset_name) {
     tibble(variable = var, eta2 = eta_val, ci_lower = ci[1], ci_upper = ci[2])
   })
 
-  # Create bar plot with error bars
+  label_df <- tibble(
+    y = c(0.01, 0.06, 0.14),
+    label = c("small", "moderate", "large"),
+    x = -Inf
+  )
+
   ggplot(results_eta, aes(x = reorder(variable, eta2), y = eta2)) +
-    geom_col(fill = "cornsilk3") +
+    geom_col(fill = actual_palette[3]) +
     geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0.2) +
-    coord_flip() +
-    labs(title = paste("Kruskal-Wallis η² effect size (95% CI) -", dataset_name),
-         y = "η² (eta-squared)", x = "Variables") +
+    geom_hline(
+      yintercept = c(0, 0.01, 0.06, 0.14),
+      linetype = "dashed",
+      color = c("black", "grey55", "orange", "salmon")
+    ) +
+    annotate(
+      "text",
+      x = label_df$x,
+      y = label_df$y,
+      label = label_df$label,
+      angle = 90,
+      hjust = -0.2,
+      vjust = 1.2,
+      size = 3.5,
+      color = c("grey55", "orange", "salmon")
+    ) +
+    coord_flip(clip = "off") +
+    labs(
+      title = paste("Kruskal-Wallis η² effect size (95% CI) -", dataset_name),
+      y = "η² (eta-squared)", x = "Variables"
+    ) +
     theme_plot() +
-    theme(axis.text.y = element_text(size = 8)) +
-    geom_hline(yintercept = c(0, 0.06, 0.14), linetype = "dashed",
-               color = c("grey55", "orange", "salmon")) +
+    theme(
+      axis.text.y = element_text(size = 8),
+      plot.margin = ggplot2::margin(5.5, 25, 5.5, 5.5)
+    ) +
     scale_x_discrete(labels = function(x) stringr::str_wrap(x, width = 35))
 }
 
@@ -1448,11 +1494,11 @@ print(p_effect_valid)
 cat("\n=== Creating Combined Training Plot ===\n")
 
 # Combine effect size plot (left) + violin plot (right)
-p_left_clusters_train <- p_effect_training + theme(plot.margin = margin(5, 5, 5, 5))
-p_right_clusters_train <- p_trigeminal_clustered_training_data + theme(plot.margin = margin(5, 5, 5, 5))
+p_left_clusters_train <- p_effect_training + theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
+p_right_clusters_train <- p_trigeminal_clustered_training_data + theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
 
 p_combined_clusters_train <- (p_left_clusters_train | p_right_clusters_train) +
-  plot_layout(widths = c(1, 2)) +
+  plot_layout(widths = c(1, 3)) +
   plot_annotation(
     title = "Cluster differences in trigeminal measures: Training data",
     tag_levels = list(c("A", "B")),
@@ -1461,15 +1507,15 @@ p_combined_clusters_train <- (p_left_clusters_train | p_right_clusters_train) +
       plot.tag = element_text(face = "bold", size = 16)
     )
   ) &
-  theme(plot.margin = margin(5, 5, 5, 5))
+  theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
 
 print(p_combined_clusters_train)
 
 # Save combined training plot
 ggsave("p_combined_clusters_train.svg", p_combined_clusters_train,
-       width = 17, height = 15, dpi = 300, limitsize = FALSE)
+       width = 20, height = 15, dpi = 300, limitsize = FALSE)
 ggsave("p_combined_clusters_train.png", p_combined_clusters_train,
-       width = 17, height = 15, dpi = 300, limitsize = FALSE)
+       width = 20, height = 15, dpi = 300, limitsize = FALSE)
 
 cat("Combined training plot saved\n")
 
@@ -1487,15 +1533,27 @@ print(as.data.frame(results_effect_valid))
 
 # Calculate p-values (Wilcoxon test for 2 groups, Kruskal-Wallis for >2)
 cat("\nCalculating p-values...\n")
-p_vals_train <- apply(trigeminal_clustered_training_data[, !names(trigeminal_clustered_training_data) %in% c("Cluster", "ID")], 2,
-                      function(x) wilcox.test(x ~ trigeminal_clustered_training_data$Cluster)$p.value)
-cat("Training p-values:\n")
-print(p_vals_train)
+if (length(unique(trigeminal_clustered_training_data$Cluster)) == 2) {
+  p_vals_train <- apply(trigeminal_clustered_training_data[, !names(trigeminal_clustered_training_data) %in% c("Cluster", "ID")], 2,
+                        function(x) wilcox.test(x ~ trigeminal_clustered_training_data$Cluster)$p.value)
+  cat("Training p-values:\n")
+  print(p_vals_train)
 
-p_vals_valid <- apply(trigeminal_clustered_validation_data[, !names(trigeminal_clustered_validation_data) %in% c("Cluster", "ID")], 2,
-                      function(x) wilcox.test(x ~ trigeminal_clustered_validation_data$Cluster)$p.value)
-cat("Validation p-values:\n")
-print(p_vals_valid)
+  p_vals_valid <- apply(trigeminal_clustered_validation_data[, !names(trigeminal_clustered_validation_data) %in% c("Cluster", "ID")], 2,
+                        function(x) wilcox.test(x ~ trigeminal_clustered_validation_data$Cluster)$p.value)
+  cat("Validation p-values:\n")
+  print(p_vals_valid)
+} else {
+  p_vals_train <- apply(trigeminal_clustered_training_data[, !names(trigeminal_clustered_training_data) %in% c("Cluster", "ID")], 2,
+                        function(x) kruskal.test(x ~ trigeminal_clustered_training_data$Cluster)$p.value)
+  cat("Training p-values:\n")
+  print(p_vals_train)
+
+  p_vals_valid <- apply(trigeminal_clustered_validation_data[, !names(trigeminal_clustered_validation_data) %in% c("Cluster", "ID")], 2,
+                        function(x) kruskal.test(x ~ trigeminal_clustered_validation_data$Cluster)$p.value)
+  cat("Validation p-values:\n")
+  print(p_vals_valid)
+}
 
 # Sort both tables by variable (ensure same order)
 results_effect_training <- results_effect_training %>% arrange(variable)
@@ -1505,18 +1563,18 @@ results_effect_valid <- results_effect_valid %>% arrange(variable)
 cat("\nCorrelating effect sizes across datasets (Kendall's tau)...\n")
 if (k_clusters == 2) {
   # Rank-biserial correlation
-  plot(results_effect_valid$r ~ results_effect_training$r)
+  # plot(results_effect_valid$r ~ results_effect_training$r)
   Tau_clusters <- cor.test(x = results_effect_training$r,
                            y = results_effect_valid$r, method = "kendall")
   df_effsize <- cbind.data.frame(Training = results_effect_training$r,
-                          Validation = results_effect_valid$r)
+                                 Validation = results_effect_valid$r)
 } else {
   # Eta-squared
-  plot(results_effect_valid$eta2 ~ results_effect_training$eta2)
+  # plot(results_effect_valid$eta2 ~ results_effect_training$eta2)
   Tau_clusters <- cor.test(x = results_effect_training$eta2,
                            y = results_effect_valid$eta2, method = "kendall")
   df_effsize <- data.frame(Training = results_effect_training$eta2,
-                          Validation = results_effect_valid$eta2)
+                           Validation = results_effect_valid$eta2)
 }
 df_effsize$mean_effect <- rowMeans(df_effsize)
 df_effsize$variable <- str_wrap(results_effect_training$variable, width = 22)
@@ -1524,13 +1582,81 @@ df_effsize$variable <- str_wrap(results_effect_training$variable, width = 22)
 print(Tau_clusters)
 
 # Create correlation plot
+set.seed(42)
 p_cor_Effsizes_tau <-
   ggplot(df_effsize, aes(x = Training, y = Validation, color = as.factor(mean_effect))) +
   geom_point(size = 4, show.legend = FALSE) +
-  ggrepel::geom_text_repel(aes(x = Training, y = Validation, label=variable), force = TRUE, force_pull = TRUE, size = 1.5, show.legend = FALSE) +
-  stat_cor(method = "kendall", label.x = .1, label.y = .6) +
+  ggpubr::stat_cor(data = df_effsize, aes(x = Training, y = Validation, color = mean_effect), method = "kendall", cor.coef.name = "tau", label.x.npc = "left", label.y.npc = "top") +
+  ggrepel::geom_text_repel(aes(x = Training, y = Validation, label = variable), force = TRUE, force_pull = TRUE, size = 1.5, show.legend = FALSE) +
   guides(color = "none") +
   theme_plot()
+
+
+# Check Most relevant variables by ABC categorization
+ABC_training <- cABCanalysis::cABC_analysis(df_effsize$Training)
+ABC_valid <- cABCanalysis::cABC_analysis(df_effsize$Validation)
+
+df_effsize <- df_effsize %>%
+  mutate(
+    ABC_training = case_when(
+      row_number() %in% ABC_training$Aind ~ "A",
+      row_number() %in% ABC_training$Bind ~ "B",
+      row_number() %in% ABC_training$Cind ~ "C",
+      TRUE ~ NA_character_
+    )
+  )
+
+df_effsize <- df_effsize %>%
+  mutate(
+    ABC_validation = case_when(
+      row_number() %in% ABC_valid$Aind ~ "A",
+      row_number() %in% ABC_valid$Bind ~ "B",
+      row_number() %in% ABC_valid$Cind ~ "C",
+      TRUE ~ NA_character_
+    )
+  )
+
+df_effsize$variable_orig <- gsub("\n", " ", df_effsize$variable)
+
+write.csv(df_effsize, "effsizes_trig_cluster_variables.csv")
+
+df_effsize$variable_orig[df_effsize$ABC_training == "A" & df_effsize$ABC_validation == "A"]
+
+########## Venn trigeminal features training and validation   ######################
+
+# Assemble sets
+Feature_sets_trig <- list(
+  training_A = df_effsize$variable_orig[df_effsize$ABC_training == "A"],
+  training_B = df_effsize$variable_orig[df_effsize$ABC_training == "B"],
+  training_C = df_effsize$variable_orig[df_effsize$ABC_training == "C"],
+  validation_A = df_effsize$variable_orig[df_effsize$ABC_validation == "A"],
+  validation_B = df_effsize$variable_orig[df_effsize$ABC_validation == "B"],
+  validation_C = df_effsize$variable_orig[df_effsize$ABC_validation == "C"]
+)
+
+# Plot venn
+plot.new()
+set.seed(42)
+myNV_trig <- plotVenn(Feature_sets_trig, nCycles = 100000)
+showSVG(myNV_trig, opacity = 0.1, outFile = "Feature_sets_trig_cluster.svg")
+
+########## Compare var imp with Boruta RF var imp   ######################
+
+# Trig_clusters_and_vars <- trigeminal_clustered_training_data[!names(trigeminal_clustered_training_data) %in% c("ID")]
+# Boruta::Boruta(as.factor(Cluster) ~ ., data = Trig_clusters_and_vars)
+# varimp_Trig_clusters_training <- Boruta::Boruta(Cluster ~ ., data = Trig_clusters_and_vars)
+# par(mfrow=c(2,1))
+# plot(varimp_Trig_clusters_training, las=2, xlab = NULL)
+# par(mfrow=c(1,1))
+#
+# Boruta_history <- varimp_Trig_clusters_training$ImpHistory
+# Boruta_history[Boruta_history==-Inf] <- NA
+# Boruta_importance <- data.frame(apply(Boruta_history, 2, function(x) median(x, na.rm = TRUE)))
+# names(Boruta_importance) <- "median_importance"
+#
+# Boruta_A_vars <- rownames(Boruta_importance)[cABCanalysis::cABC_analysis(Boruta_importance$median_importance)$Aind]
+# intersect(Boruta_A_vars, Feature_sets_trig$training_A)
+
 
 # ============================================================================ #
 # 21. COMBINED PLOTS FOR VALIDATION DATA
@@ -1539,13 +1665,13 @@ p_cor_Effsizes_tau <-
 cat("\n=== Creating Combined Validation Plot ===\n")
 
 # Combine effect size + correlation (left) + violin plot (right)
-p_left_clusters_valid <- (p_effect_valid + theme(plot.margin = margin(5, 5, 5, 5))) /
-  (p_cor_Effsizes_tau + theme(plot.margin = margin(5, 5, 5, 5))) +
+p_left_clusters_valid <- (p_effect_valid + theme(plot.margin = ggplot2::margin(5, 5, 5, 5))) /
+  (p_cor_Effsizes_tau + theme(plot.margin = ggplot2::margin(5, 5, 5, 5))) +
   plot_layout(heights = c(2, 1))
-p_right_clusters_valid <- p_trigeminal_clustered_valid_data + theme(plot.margin = margin(5, 5, 5, 5))
+p_right_clusters_valid <- p_trigeminal_clustered_valid_data + theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
 
 p_combined_clusters_valid <- (p_left_clusters_valid | p_right_clusters_valid) +
-  plot_layout(widths = c(1, 2)) +
+  plot_layout(widths = c(1, 3)) +
   plot_annotation(
     title = "Cluster differences in trigeminal measures: Validation data",
     tag_levels = list(c("A", "B")),
@@ -1554,15 +1680,15 @@ p_combined_clusters_valid <- (p_left_clusters_valid | p_right_clusters_valid) +
       plot.tag = element_text(face = "bold", size = 16)
     )
   ) &
-  theme(plot.margin = margin(5, 5, 5, 5))
+  theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
 
 print(p_combined_clusters_valid)
 
 # Save combined validation plot
 ggsave("p_combined_clusters_valid.svg", p_combined_clusters_valid,
-       width = 17, height = 15, dpi = 300, limitsize = FALSE)
+       width = 20, height = 15, dpi = 300, limitsize = FALSE)
 ggsave("p_combined_clusters_valid.png", p_combined_clusters_valid,
-       width = 17, height = 15, dpi = 300, limitsize = FALSE)
+       width = 20, height = 15, dpi = 300, limitsize = FALSE)
 
 cat("Combined validation plot saved\n")
 
@@ -1578,19 +1704,19 @@ row_order <- order(row_means_all)
 clusters_all <- c(TriFunQ_clusters, clusters_val)
 
 # Combined matrix (rows ordered by mean)
-heat_matrix_main <- rbind(heat_matrix, heat_matrix_validation)[row_order, ]
+heat_matrix_main <- rbind(heat_matrix, heat_matrix_validation)[row_order,]
 
 # Dataset annotation (training vs validation)
 train_valid_anno <- rep(c("training", "validation"),
-                       c(nrow(heat_matrix), nrow(heat_matrix_validation)))[row_order]
+                        c(nrow(heat_matrix), nrow(heat_matrix_validation)))[row_order]
 
 # Define color palette
-pal2 <- colorRampPalette(c("cornsilk", "cornsilk3", "cornsilk4", "grey33"))
+pal2 <- colorRampPalette(c(actual_palette[1], actual_palette[3], actual_palette[4], "grey33"))
 
 # Right annotation: row means barplot (colored by dataset)
 row_means_ha <- rowAnnotation(
   bar = anno_barplot(row_means_all[row_order],
-                     gp = gpar(fill = ifelse(train_valid_anno == "training", "cornsilk1", "cornsilk4"),
+                     gp = gpar(fill = ifelse(train_valid_anno == "training", actual_palette[1], actual_palette[4]),
                                col = NA),
                      border = TRUE),
   show_legend = FALSE,
@@ -1603,11 +1729,13 @@ row_means_ha <- rowAnnotation(
 # Left annotation: dataset label
 train_valid_ha <- rowAnnotation(
   Dataset = train_valid_anno,
-  col = list(Dataset = c("training" = "cornsilk1", "validation" = "cornsilk4")),
+  col = list(Dataset = c("training" = actual_palette[1], "validation" = actual_palette[4])),
   show_annotation_name = TRUE,
   annotation_name_rot = 90,
   width = unit(1.5, "cm")
 )
+
+colnames(heat_matrix_main) <- stringr::str_wrap(colnames(heat_matrix_main), width = 35)
 
 # Create heatmap function
 create_heatmap_trig_clustered_data <- function() {
@@ -1643,9 +1771,9 @@ p_title_heat <- ggplot() +
   theme_void() +
   theme(
     plot.title = element_text(face = "plain", size = 12, color = "#222222",
-                             hjust = 0, margin = margin(b = 5)),
+                              hjust = 0, margin = ggplot2::margin(b = 5)),
     plot.background = element_rect(fill = "white", color = NA),
-    plot.margin = margin(20, 20, 0, 20)
+    plot.margin = ggplot2::margin(20, 20, 0, 20)
   )
 
 # Combine title + heatmap
@@ -1661,41 +1789,561 @@ print(heat_plot_clustered_variables)
 
 # Save heatmap
 ggsave("heat_plot_clustered_variables.svg", heat_plot_clustered_variables,
-       width = 12, height = 15)
+       width = 12, height = 12)
 ggsave("heat_plot_clustered_variables.png", heat_plot_clustered_variables,
-       width = 12, height = 15, dpi = 300)
+       width = 12, height = 12, dpi = 300)
 
 cat("Clustered variables heatmap saved\n")
 
+
 # ============================================================================ #
-# 23. END OF ANALYSIS
+# 23. END OF CLUSTER  ANALYSIS
 # ============================================================================ #
 
-cat("\n" , rep("=", 78), "\n", sep = "")
-cat("ANALYSIS COMPLETE!\n")
+cat("\n", rep("=", 78), "\n", sep = "")
+cat("CLUSTER ANALYSIS COMPLETE!\n")
 cat(rep("=", 78), "\n\n", sep = "")
+
+# ============================================================================ #
+# 24. PREPARE DATA FOR VARIABLE ANALYSIS BY AMMOLA CLASS
+# ============================================================================ #
+
+cat("\n=== Preparing Data for Variable Analysis by AmmoLa Class ===\n")
+
+# Load AmmoLa class assignments (ID + Class, binary 0/1)
+ammo_classes <- read.csv("AmmoLa_classes.csv")
+cat("AmmoLa classes loaded:", nrow(ammo_classes), "subjects,",
+    length(unique(ammo_classes$Class)), "classes\n")
+
+# Align class labels to training/validation row order via match()
+# (same logic as TriFunQ_clusters alignment in section 16)
+ammo_classes_train <- ammo_classes[match(trigeminale_training_data$ID, ammo_classes$ID),]
+ammo_classes_valid <- ammo_classes[match(trigeminale_validation_data$ID, ammo_classes$ID),]
+
+k_classes <- length(unique(ammo_classes_train$Class))
+
+# Training data: combine classes with original variables
+# Class stored as "Cluster" so existing analysis functions (sections 17-18) work unchanged
+trigeminal_class_training_data <- cbind.data.frame(
+  Cluster = as.factor(ammo_classes_train$Class),
+  trigeminale_training_data[, names(trigeminale_training_data) %in% c(
+    variables_by_categories$Nasal_chemosensory_perception,
+    variables_by_categories$Psychophysical_measurements[c(1, 2, 4)])]
+)
+
+trigeminal_class_training_data$ID <- trigeminale_training_data$ID
+
+trigeminal_class_training_data$`CO2 threshold` <-
+  -slog(trigeminal_class_training_data$`CO2 threshold`)
+trigeminal_class_training_data$`AmmoLa intensity` <-
+  reflect_slog_unflipped(trigeminal_class_training_data$`AmmoLa intensity`)
+
+trigeminal_class_training_data <- trigeminal_class_training_data %>%
+  rename(AmmoLa_intensity_transformed = `AmmoLa intensity`,
+         CO2_threshold_transformed = `CO2 threshold`)
+
+trigeminal_class_training_data_long <- reshape2::melt(
+  trigeminal_class_training_data[, !names(trigeminal_class_training_data) %in% c("ID")],
+  id.vars = "Cluster"
+)
+
+# Validation data: combine classes with original variables
+trigeminal_class_validation_data <- cbind.data.frame(
+  Cluster = as.factor(ammo_classes_valid$Class),
+  trigeminale_validation_data[, names(trigeminale_validation_data) %in% c(
+    variables_by_categories$Nasal_chemosensory_perception,
+    variables_by_categories$Psychophysical_measurements[c(1, 2, 4)])]
+)
+
+trigeminal_class_validation_data$ID <- trigeminale_validation_data$ID
+
+trigeminal_class_validation_data$`CO2 threshold` <-
+  -slog(trigeminal_class_validation_data$`CO2 threshold`)
+trigeminal_class_validation_data$`AmmoLa intensity` <-
+  reflect_slog_unflipped(trigeminal_class_validation_data$`AmmoLa intensity`)
+
+trigeminal_class_validation_data <- trigeminal_class_validation_data %>%
+  rename(AmmoLa_intensity_transformed = `AmmoLa intensity`,
+         CO2_threshold_transformed = `CO2 threshold`)
+
+trigeminal_class_validation_data_long <- reshape2::melt(
+  trigeminal_class_validation_data[, !names(trigeminal_class_validation_data) %in% c("ID")],
+  id.vars = "Cluster"
+)
+
+datasets_class <- list(
+  training = trigeminal_class_training_data_long,
+  valid = trigeminal_class_validation_data_long
+)
+
+cat("Data prepared for", length(unique(trigeminal_class_training_data_long$variable)),
+    "variables across", k_classes, "AmmoLa classes\n")
+
+# ============================================================================ #
+# 25. GENERATE PLOTS AND EFFECT SIZE TABLES BY AMMOLA CLASS
+# ============================================================================ #
+
+cat("\n=== Generating Variable Analysis Plots by AmmoLa Class ===\n")
+cat("Effect size method:", ifelse(k_classes == 2, "Rank-biserial (2 groups)", "Eta-squared (>2 groups)"), "\n")
+
+plots_and_tables_class <- map2(datasets_class, names(datasets_class), function(data, name) {
+
+  violin_plot <- create_violin_plot(data, stringr::str_to_title(name),
+                                    k_clusters = k_classes, group_label = "Class")
+
+  n_classes_local <- length(unique(data$Cluster))
+
+  if (n_classes_local == 2) {
+    effect_plot <- create_rank_biserial_plot(data, stringr::str_to_title(name))
+
+    variables <- unique(data$variable)
+    effect_results <- map_df(variables, function(var) {
+      data_var <- data %>% filter(variable == var, !is.na(value))
+
+      x <- data_var$value[data_var$Cluster == levels(data_var$Cluster)[1]]
+      y <- data_var$value[data_var$Cluster == levels(data_var$Cluster)[2]]
+
+      if (length(x) < 2 || length(y) < 2) {
+        return(tibble(variable = var, r = NA, ci_lower = NA, ci_upper = NA))
+      }
+
+      r <- rank_biserial_val(x, y)
+      ci <- boot_rank_biserial(x, y)
+      tibble(variable = var, r = r, ci_lower = ci[1], ci_upper = ci[2])
+    })
+
+  } else {
+    effect_plot <- create_eta_plot(data, stringr::str_to_title(name))
+
+    variables <- unique(data$variable)
+    effect_results <- map_df(variables, function(var) {
+      data_var <- data %>% filter(variable == var, !is.na(value))
+      if (nrow(data_var) < 10 || length(unique(data_var$Cluster)) < 2) {
+        return(tibble(variable = var, eta2 = NA, ci_lower = NA, ci_upper = NA))
+      }
+      eta_val <- eta_squared(data_var)
+      ci <- boot_eta_squared(data_var)
+      tibble(variable = var, eta2 = eta_val, ci_lower = ci[1], ci_upper = ci[2])
+    })
+  }
+
+  list(violin = violin_plot, effect_plot = effect_plot, effect_table = effect_results)
+})
+
+p_trigeminal_class_training_data <- plots_and_tables_class$training$violin
+p_trigeminal_class_valid_data <- plots_and_tables_class$valid$violin
+p_effect_class_training <- plots_and_tables_class$training$effect_plot
+p_effect_class_valid <- plots_and_tables_class$valid$effect_plot
+results_effect_class_training <- plots_and_tables_class$training$effect_table
+results_effect_class_valid <- plots_and_tables_class$valid$effect_table
+
+print(p_trigeminal_class_training_data)
+print(p_trigeminal_class_valid_data)
+print(p_effect_class_training)
+print(p_effect_class_valid)
+
+# ============================================================================ #
+# 26. COMBINED PLOTS FOR TRAINING DATA (AMMOLA CLASS)
+# ============================================================================ #
+
+cat("\n=== Creating Combined Training Plot (AmmoLa Class) ===\n")
+
+p_left_class_train <- p_effect_class_training + theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
+p_right_class_train <- p_trigeminal_class_training_data + theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
+
+p_combined_class_train <- (p_left_class_train | p_right_class_train) +
+  plot_layout(widths = c(1, 3)) +
+  plot_annotation(
+    title = "AmmoLa class differences in trigeminal measures: Training data",
+    tag_levels = list(c("A", "B")),
+    theme = theme(
+      plot.title = element_text(size = 14, hjust = 0),
+      plot.tag = element_text(face = "bold", size = 16)
+    )
+  ) &
+  theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
+
+print(p_combined_class_train)
+
+ggsave("p_combined_class_train.svg", p_combined_class_train,
+       width = 20, height = 15, dpi = 300, limitsize = FALSE)
+ggsave("p_combined_class_train.png", p_combined_class_train,
+       width = 20, height = 15, dpi = 300, limitsize = FALSE)
+
+cat("Combined training plot (AmmoLa class) saved\n")
+
+# ============================================================================ #
+# 27. STATISTICAL TESTS AND CROSS-DATASET CORRELATION (AMMOLA CLASS)
+# ============================================================================ #
+
+cat("\n=== Calculating P-Values and Cross-Dataset Correlation (AmmoLa Class) ===\n")
+
+cat("\nTraining effect sizes (AmmoLa class):\n")
+print(as.data.frame(results_effect_class_training))
+cat("\nValidation effect sizes (AmmoLa class):\n")
+print(as.data.frame(results_effect_class_valid))
+
+cat("\nCalculating p-values (AmmoLa class)...\n")
+if (length(unique(trigeminal_class_training_data$Cluster)) == 2) {
+  p_vals_class_train <- apply(
+    trigeminal_class_training_data[, !names(trigeminal_class_training_data) %in% c("Cluster", "ID")], 2,
+    function(x) wilcox.test(x ~ trigeminal_class_training_data$Cluster)$p.value)
+  cat("Training p-values (AmmoLa class):\n")
+  print(p_vals_class_train)
+
+  p_vals_class_valid <- apply(
+    trigeminal_class_validation_data[, !names(trigeminal_class_validation_data) %in% c("Cluster", "ID")], 2,
+    function(x) wilcox.test(x ~ trigeminal_class_validation_data$Cluster)$p.value)
+  cat("Validation p-values (AmmoLa class):\n")
+  print(p_vals_class_valid)
+} else {
+  p_vals_class_train <- apply(
+    trigeminal_class_training_data[, !names(trigeminal_class_training_data) %in% c("Cluster", "ID")], 2,
+    function(x) kruskal.test(x ~ trigeminal_class_training_data$Cluster)$p.value)
+  cat("Training p-values (AmmoLa class):\n")
+  print(p_vals_class_train)
+
+  p_vals_class_valid <- apply(
+    trigeminal_class_validation_data[, !names(trigeminal_class_validation_data) %in% c("Cluster", "ID")], 2,
+    function(x) kruskal.test(x ~ trigeminal_class_validation_data$Cluster)$p.value)
+  cat("Validation p-values (AmmoLa class):\n")
+  print(p_vals_class_valid)
+}
+
+results_effect_class_training <- results_effect_class_training %>% arrange(variable)
+results_effect_class_valid <- results_effect_class_valid %>% arrange(variable)
+
+cat("\nCorrelating effect sizes across datasets (Kendall's tau, AmmoLa class)...\n")
+if (k_classes == 2) {
+  Tau_classes <- cor.test(x = results_effect_class_training$r,
+                               y = results_effect_class_valid$r, method = "kendall")
+  df_effsize_class <- cbind.data.frame(Training = results_effect_class_training$r,
+                                       Validation = results_effect_class_valid$r)
+} else {
+  Tau_classes <- cor.test(x = results_effect_class_training$eta2,
+                                y = results_effect_class_valid$eta2, method = "kendall")
+  df_effsize_class <- data.frame(Training = results_effect_class_training$eta2,
+                                 Validation = results_effect_class_valid$eta2)
+}
+df_effsize_class$mean_effect <- rowMeans(df_effsize_class)
+df_effsize_class$variable <- str_wrap(results_effect_class_training$variable, width = 22)
+df_effsize_class <- df_effsize_class[df_effsize_class$variable != "AmmoLa_intensity_transformed",]
+
+print(Tau_classes)
+
+set.seed(42)
+p_cor_Effsizes_tau_class <-
+  ggplot(df_effsize_class, aes(x = Training, y = Validation, color = as.factor(mean_effect))) +
+  geom_point(size = 4, show.legend = FALSE) +
+  ggpubr::stat_cor(data = df_effsize_class,
+                   aes(x = Training, y = Validation, color = mean_effect),
+                   method = "kendall", cor.coef.name = "tau",
+                   label.x.npc = "left", label.y.npc = "top") +
+  ggrepel::geom_text_repel(aes(x = Training, y = Validation, label = variable),
+                           force = TRUE, force_pull = TRUE, size = 1.5, show.legend = FALSE) +
+  guides(color = "none") +
+  theme_plot()
+
+ABC_class_training <- cABCanalysis::cABC_analysis(df_effsize_class$Training)
+ABC_class_valid <- cABCanalysis::cABC_analysis(df_effsize_class$Validation)
+
+df_effsize_class <- df_effsize_class %>%
+  mutate(
+    ABC_training = case_when(
+      row_number() %in% ABC_class_training$Aind ~ "A",
+      row_number() %in% ABC_class_training$Bind ~ "B",
+      row_number() %in% ABC_class_training$Cind ~ "C",
+      TRUE ~ NA_character_
+    )
+  )
+
+df_effsize_class <- df_effsize_class %>%
+  mutate(
+    ABC_validation = case_when(
+      row_number() %in% ABC_class_valid$Aind ~ "A",
+      row_number() %in% ABC_class_valid$Bind ~ "B",
+      row_number() %in% ABC_class_valid$Cind ~ "C",
+      TRUE ~ NA_character_
+    )
+  )
+
+df_effsize_class$variable_orig <- gsub("\n", " ", df_effsize_class$variable)
+
+write.csv(df_effsize_class, "effsizes_trig_class_variables.csv")
+
+df_effsize_class$variable_orig[df_effsize_class$ABC_training == "A" & df_effsize_class$ABC_validation == "A"]
+
+Feature_sets_trig_class <- list(
+  training_A = df_effsize_class$variable_orig[df_effsize_class$ABC_training == "A"],
+  training_B = df_effsize_class$variable_orig[df_effsize_class$ABC_training == "B"],
+  training_C = df_effsize_class$variable_orig[df_effsize_class$ABC_training == "C"],
+  validation_A = df_effsize_class$variable_orig[df_effsize_class$ABC_validation == "A"],
+  validation_B = df_effsize_class$variable_orig[df_effsize_class$ABC_validation == "B"],
+  validation_C = df_effsize_class$variable_orig[df_effsize_class$ABC_validation == "C"]
+)
+
+plot.new()
+set.seed(42)
+myNV_trig_class <- plotVenn(Feature_sets_trig_class, nCycles = 100000)
+showSVG(myNV_trig_class, opacity = 0.1, outFile = "Feature_sets_trig_class.svg")
+
+# ============================================================================ #
+# 28. COMBINED PLOTS FOR VALIDATION DATA (AMMOLA CLASS)
+# ============================================================================ #
+
+cat("\n=== Creating Combined Validation Plot (AmmoLa Class) ===\n")
+
+p_left_class_valid <- (p_effect_class_valid + theme(plot.margin = ggplot2::margin(5, 5, 5, 5))) /
+  (p_cor_Effsizes_tau_class + theme(plot.margin = ggplot2::margin(5, 5, 5, 5))) +
+  plot_layout(heights = c(2, 1))
+p_right_class_valid <- p_trigeminal_class_valid_data + theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
+
+p_combined_class_valid <- (p_left_class_valid | p_right_class_valid) +
+  plot_layout(widths = c(1, 3)) +
+  plot_annotation(
+    title = "AmmoLa class differences in trigeminal measures: Validation data",
+    tag_levels = list(c("A", "B")),
+    theme = theme(
+      plot.title = element_text(size = 14, hjust = 0),
+      plot.tag = element_text(face = "bold", size = 16)
+    )
+  ) &
+  theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
+
+print(p_combined_class_valid)
+
+ggsave("p_combined_class_valid.svg", p_combined_class_valid,
+       width = 20, height = 15, dpi = 300, limitsize = FALSE)
+ggsave("p_combined_class_valid.png", p_combined_class_valid,
+       width = 20, height = 15, dpi = 300, limitsize = FALSE)
+
+cat("Combined validation plot (AmmoLa class) saved\n")
+
+# ============================================================================ #
+# 29. HEATMAP BY AMMOLA CLASS
+# ============================================================================ #
+
+cat("\n=== Creating Heatmap by AmmoLa Class ===\n")
+
+classes_all <- c(ammo_classes_train$Class, ammo_classes_valid$Class)
+
+# Same subject ordering as cluster heatmap (row_order computed in section 22)
+heat_matrix_class_main <- rbind(heat_matrix, heat_matrix_validation)[row_order,]
+colnames(heat_matrix_class_main) <- colnames(heat_matrix_main)
+
+row_means_ha_class <- rowAnnotation(
+  bar = anno_barplot(row_means_all[row_order],
+                     gp = gpar(
+                       fill = ifelse(train_valid_anno == "training",
+                                     actual_palette[1], actual_palette[4]),
+                       col = NA),
+                     border = TRUE),
+  show_legend = FALSE,
+  annotation_label = "Row means",
+  annotation_name_rot = 90,
+  show_annotation_name = TRUE,
+  width = unit(2, "cm")
+)
+
+train_valid_ha_class <- rowAnnotation(
+  Dataset = train_valid_anno,
+  col = list(Dataset = c("training" = actual_palette[1],
+                              "validation" = actual_palette[4])),
+  show_annotation_name = TRUE,
+  annotation_name_rot = 90,
+  width = unit(1.5, "cm")
+)
+
+create_heatmap_trig_class_data <- function() {
+  grid::grid.grabExpr({
+    ht <- ComplexHeatmap::Heatmap(
+      as.matrix(heat_matrix_class_main),
+      left_annotation = train_valid_ha_class,
+      right_annotation = row_means_ha_class,
+      col = pal2(112),
+      column_names_gp = grid::gpar(fontsize = 10),
+      column_names_rot = 90,
+      heatmap_legend_param = list(
+        title = "Scaled value [0,3]",
+        direction = "horizontal",
+        title_position = "lefttop"
+      ),
+      cluster_rows = FALSE,
+      cluster_columns = FALSE,
+      show_row_names = FALSE,
+      column_names_max_height = grid::unit(16, "cm"),
+      row_split = classes_all[row_order]
+    )
+    ComplexHeatmap::draw(ht, heatmap_legend_side = "bottom")
+  })
+}
+
+gp_class_variables <- create_heatmap_trig_class_data()
+
+p_title_heat_class <- ggplot() +
+  labs(title = "Variables by AmmoLa class") +
+  theme_void() +
+  theme(
+    plot.title = element_text(face = "plain", size = 12, color = "#222222",
+                                   hjust = 0, margin = ggplot2::margin(b = 5)),
+    plot.background = element_rect(fill = "white", color = NA),
+    plot.margin = ggplot2::margin(20, 20, 0, 20)
+  )
+
+heat_plot_class_variables <- cowplot::plot_grid(
+  p_title_heat_class,
+  cowplot::as_grob(gp_class_variables),
+  ncol = 1,
+  rel_heights = c(0.05, 1),
+  align = "v"
+)
+
+print(heat_plot_class_variables)
+
+ggsave("heat_plot_class_variables.svg", heat_plot_class_variables,
+       width = 12, height = 12)
+ggsave("heat_plot_class_variables.png", heat_plot_class_variables,
+       width = 12, height = 12, dpi = 300)
+
+cat("AmmoLa class heatmap saved\n")
+
+################################################################################
+# 30. REPORT RESULTS
+################################################################################
 
 cat("Summary:\n")
 cat("  - Best clustering method:", best_projection_method, "+", best_clustering_method, "\n")
 cat("  - Number of clusters:", k_clusters, "\n")
+cat("  - Number of AmmoLa classes:", k_classes, "\n")
 cat("  - Training samples:", length(TriFunQ_clusters), "\n")
 cat("  - Validation samples:", length(clusters_val), "\n")
 cat("  - Effect size method:", ifelse(k_clusters == 2, "Rank-biserial", "Eta-squared"), "\n")
-cat("  - Cross-dataset correlation (Kendall's tau):", round(Tau_clusters$estimate, 3), "\n")
-cat("  - Correlation p-value:", format.pval(Tau_clusters$p.value, digits = 3), "\n\n")
+cat("  - Cluster cross-dataset correlation (Kendall's tau):",
+    round(Tau_clusters$estimate, 3), "(p =", format.pval(Tau_clusters$p.value, digits = 3), ")\n")
+cat("  - AmmoLa class cross-dataset correlation (Kendall's tau):",
+    round(Tau_classes$estimate, 3), "(p =", format.pval(Tau_classes$p.value, digits = 3), ")\n\n")
 
 cat("Output files generated:\n")
+cat("  Clustering-based analysis:\n")
 cat("  - Combined_projection_and_clustering_analysis_plot_*.svg\n")
 cat("  - dfClusterQuality.csv\n")
 cat("  - p_GMM_row_means.svg/png\n")
 cat("  - combined_trig_clustering_plot.svg/png\n")
 cat("  - p_combined_clusters_train.svg/png\n")
 cat("  - p_combined_clusters_valid.svg/png\n")
-cat("  - heat_plot_clustered_variables.svg/png\n\n")
+cat("  - effsizes_trig_cluster_variables.csv\n")
+cat("  - Feature_sets_trig_cluster.svg\n")
+cat("  - heat_plot_clustered_variables.svg/png\n")
+cat("  AmmoLa class-based analysis:\n")
+cat("  - p_combined_class_train.svg/png\n")
+cat("  - p_combined_class_valid.svg/png\n")
+cat("  - effsizes_trig_class_variables.csv\n")
+cat("  - Feature_sets_trig_class.svg\n")
+cat("  - heat_plot_class_variables.svg/png\n\n")
 
 cat("Script completed successfully!\n")
 cat(date(), "\n\n")
 
+# ============================================================================ #
+# 31. ANALYSE CLUSTER MEMEBERSHIP AGREEMENT
+# ============================================================================ #
+
+ammo_classes <- read.csv("AmmoLa_classes.csv", row.names = 1)
+trig_all_classes <- read.csv("trigeminal_clustered_data.csv", row.names = 1)
+psy_classes <- read.csv("trigeminal_clustered_psy_data.csv", row.names = 1)
+
+head(ammo_classes)
+head(trig_all_classes)
+head(psy_classes)
+
+merged_df <- ammo_classes %>%
+  full_join(psy_classes, by = "ID") %>%
+  full_join(trig_all_classes, by = "ID")
+
+names(merged_df)
+merged_clusters <- merged_df[, c("Set.x", "Class", "Cluster.x", "Cluster.y")]
+rownames(merged_clusters) <- merged_df$ID
+names(merged_clusters) <- c("Set", "AmmoLa", "Psychophysical", "All_Trigeminal")
+# merged_clusters$AmmoLa <- 1+merged_clusters$AmmoLa
+
+merged_clusters <- data.frame(lapply(merged_clusters, factor))
+
+
+library(dplyr)
+library(purrr)
+library(tidyr)
+library(psych)
+library(vcd)
+
+vars <- c("AmmoLa", "Psychophysical", "All_Trigeminal")
+pairs <- combn(vars, 2, simplify = FALSE)
+
+# Make sure they are factors
+merged_clusters <- merged_clusters %>%
+  mutate(across(all_of(vars), as.factor),
+         Set = as.factor(Set))
+
+# Pairwise agreement within each Set
+kappa_results <- merged_clusters %>%
+  group_by(Set) %>%
+  group_split() %>%
+  map_df(function(df) {
+    map_df(pairs, function(p) {
+      x <- df[[p[1]]]
+      y <- df[[p[2]]]
+
+      tab <- table(x, y)
+
+      ck <- cohen.kappa(cbind(x, y))
+
+      chisq <- suppressWarnings(chisq.test(tab, correct = FALSE))
+
+      tibble(
+        Set = unique(df$Set),
+        var1 = p[1],
+        var2 = p[2],
+        n = sum(tab),
+        kappa = unname(ck$kappa),
+        kappa_se = unname(ck$se),
+        kappa_p = unname(ck$p.value),
+        chi_sq = unname(chisq$statistic),
+        chi_sq_p = chisq$p.value,
+        agreement = sum(diag(tab)) / sum(tab)
+      )
+    })
+  })
+
+kappa_results
+
+merged_clusters$Set <- factor(merged_clusters$Set)
+merged_clusters$AmmoLa <- factor(merged_clusters$AmmoLa)
+merged_clusters$Psychophysical <- factor(merged_clusters$Psychophysical)
+merged_clusters$All_Trigeminal <- factor(merged_clusters$All_Trigeminal)
+
+library(vcd)
+
+# Training vs Validation on each variable
+tab1 <- table(merged_clusters$Set, merged_clusters$AmmoLa)
+tab2 <- table(merged_clusters$Set, merged_clusters$Psychophysical)
+tab3 <- table(merged_clusters$Set, merged_clusters$All_Trigeminal)
+tab4 <- xtabs(~Set + All_Trigeminal + AmmoLa + Psychophysical, data = merged_clusters)
+
+chisq.test(tab1)
+chisq.test(tab2)
+chisq.test(tab3)
+
+vcd::mosaic(tab4, shade = TRUE, legend = TRUE)
+vcd::assoc(tab4, shade = TRUE, legend = TRUE)
+
+pdf("assoc_plot.pdf", width = 4000, height = 4000)
+vcd::mosaic(tab4, shade = TRUE, legend = TRUE)
+dev.off()
+png("assoc_plot.png", width = 4000, height = 4000, res = 300)
+vcd::mosaic(tab4, shade = TRUE, legend = TRUE)
+dev.off()
+
+
 ################################################################################
 # END OF SCRIPT
 ################################################################################
+

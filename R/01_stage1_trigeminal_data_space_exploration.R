@@ -1,6 +1,6 @@
 ################################################################################
-# Trigeminal Sensitivity Analysis - Bormann Study
-# Author: Joern Lotsch
+# Trigeminal Sensitivity Analysis
+# Author: Jorn Lotsch
 # Date: 2025-11-04
 # Description: Comprehensive analysis of trigeminal sensitivity study data
 #              including preprocessing, transformation, distribution analysis,
@@ -20,48 +20,11 @@
 ################################################################################
 
 # ========================================================================== #
-# LOAD REQUIRED LIBRARIES
+# LOAD REQUIRED LIBRARIES AND FUNCTIONS
 # ========================================================================== #
 
-library(boot) # Bootstrap methods
-library(circlize) # Color mapping for heatmaps
-library(cluster) # Clustering algorithms
-library(ComplexHeatmap) # Advanced heatmap visualization
-library(cowplot) # Plot composition and alignment
-library(patchwork) # Plot composition and alignment
-library(cvms) # Confusion matrix visualization
-library(DataVisualizations) # Pareto Density Estimation
-library(dplyr) # Data manipulation
-library(effsize) # Effect size calculations
-library(factoextra) # Factor visualization
-library(FactoMineR) # Factor analysis
-library(forcats) # Factor handling
-library(ggplot2) # Data visualization
-library(ggplotify) # Convert base plots to ggplot
-library(ggpmisc) # Additional ggplot2 functionality
-library(ggpubr) # Publication-ready plots
-library(ggthemes) # Extra themes for ggplot2
-library(ggrepel) # For text arrangement in plots
-library(grid) # Grid graphics
-library(gridExtra) # Arrange multiple grid-based plots
-library(Hmisc) # Statistical tools
-library(lubridate) # Date/time handling
-library(MASS) # Robust statistical methods
-library(missForest) # Imputation methods
-library(NbClust) # Cluster number detection
-library(opGMMassessment) # Gaussian mixture analysis
-library(pbmcapply) # Parallel apply functions
-library(psych) # Correlation analysis
-library(purrr) # Functional programming tools
-library(reshape2) # Data reshaping
-library(scales) # Scale functions for visualization
-library(stringr) # String manipulation
-library(tidyr) # Data tidying
-library(vcd) # Categorical data visualization
-library(viridis) # Color scales for plots
-library(stringr) # For strin manipulation
-
 source("globals.R")
+source("utils.R")
 
 # ========================================================================== #
 # GLOBAL OPTIONS AND ANALYSIS SWITCHES
@@ -73,241 +36,16 @@ analyze_only_untransformed <- FALSE
 plot_only_untransformed <- TRUE
 
 # ========================================================================== #
-# HELPER FUNCTIONS
-# ========================================================================== #
-
-#' Sign-preserving logarithmic transformation (zero-invariant)
-#'
-#' @param x Numeric vector to transform
-#' @param base Logarithm base (0 = natural log, 2, 10, or custom)
-#' @return Transformed vector maintaining sign of original values
-slog <- function(x, base = 10) {
-  absX <- abs(x)
-  s <- sign(x)
-
-  if (base == 0) {
-    return(s * log1p(absX))
-  } else if (base == 2) {
-    return(s * log2(absX + 1))
-  } else if (base == 10) {
-    return(s * log10(absX + 1))
-  } else {
-    return(s * log1p(absX) * log(base))
-  }
-}
-
-#' Inverse slog transformation
-#'
-#' @param y Transformed values
-#' @param base Logarithm base used in forward transformation
-#' @return Original scale values
-inv_slog <- function(y, base = 10) {
-  s <- sign(y)
-  absY <- abs(y)
-
-  if (base == 0) {
-    val <- expm1(absY)
-  } else if (base == 2) {
-    val <- 2 ^ absY - 1
-  } else if (base == 10) {
-    val <- 10 ^ absY - 1
-  } else {
-    val <- expm1(absY / log(base))
-  }
-  return(s * val)
-}
-
-#' Reflected logarithmic transformation
-#'
-#' @param x Numeric vector
-#' @return Reflected and log-transformed values
-reflect_slog <- function(x) {
-  slog(max(x, na.rm = TRUE) + 1 - x)
-}
-
-#' Reflected logarithmic transformation (unflipped)
-#'
-#' @param x Numeric vector
-#' @return Reflected and log-transformed values (negative)
-reflect_slog_unflipped <- function(x) {
-  -slog(max(x, na.rm = TRUE) + 1 - x)
-}
-
-#' Inverse of reflect_slog_unflipped transformation
-#'
-#' @param y Transformed values
-#' @param original_max Maximum value from original data
-#' @param base Logarithm base
-#' @return Original scale values
-inv_reflect_slog_unflipped <- function(y, original_max, base = 10) {
-  M <- original_max
-  x_original <- M + 1 - inv_slog(-y, base)
-  return(x_original)
-}
-
-#' Create Pareto Density Estimation plot with ggplot2
-#'
-#' @param Data Numeric matrix or data frame
-#' @return ggplot object with PDE curves
-PDEplotGG <- function(Data) {
-  Data <- as.matrix(Data)
-  m <- matrix(NA, nrow = 0, ncol = 3)
-
-  for (i in seq_len(ncol(Data))) {
-    PDE <- ParetoDensityEstimation(as.vector(na.omit(Data[, i])))
-    m2 <- PDE$kernels
-    m3 <- PDE$paretoDensity
-    m1 <- rep(i, length(m2))
-    m <- rbind(m, cbind(m1, m2, m3))
-  }
-
-  mdf <- data.frame(m)
-
-  p <- ggplot(data = mdf, aes(x = m2, y = m3, colour = factor(m1))) +
-    geom_line(aes(linewidth = 1)) +
-    guides(linewidth = FALSE)
-
-  return(p)
-}
-
-#' Convert p-values to significance stars
-#'
-#' @param p P-value
-#' @return Character string with significance stars
-signif_code <- function(p) {
-  if (is.na(p)) ""
-  else if (p < 0.001) "***"
-  else if (p < 0.01) "**"
-  else if (p < 0.05) "*"
-  else ""
-}
-
-#' Determine text color based on background brightness
-#'
-#' @param fill_color Background color
-#' @return Text color (black or white) for optimal contrast
-text_color_fun <- function(fill_color) {
-  rgb_val <- col2rgb(fill_color) / 255
-  brightness <- 0.299 * rgb_val[1,] + 0.587 * rgb_val[2,] + 0.114 * rgb_val[3,]
-  ifelse(brightness > 0.6, "#111111", "#FFFFFF")
-}
-
-#' Compute Cohen's d effect size
-#'
-#' @param x First group values
-#' @param y Second group values
-#' @return Cohen's d estimate with Hedges correction
-cohen_d_val <- function(x, y) {
-  cohen.d(x, y, hedges.correction = TRUE)$estimate
-}
-
-#' Bootstrap confidence intervals for Cohen's d
-#'
-#' @param x First group values
-#' @param y Second group values
-#' @param R Number of bootstrap replicates
-#' @return Vector with lower and upper CI bounds
-boot_cohen_d <- function(x, y, R = 1000) {
-  data <- data.frame(
-    group = rep(c("x", "y"), times = c(length(x), length(y))),
-    value = c(x, y)
-  )
-
-  stat_fun <- function(data, indices) {
-    d_x <- data$value[indices][data$group[indices] == "x"]
-    d_y <- data$value[indices][data$group[indices] == "y"]
-    if (length(d_x) < 2 || length(d_y) < 2) return(NA)
-    return(cohen_d_val(d_x, d_y))
-  }
-
-  boot_out <- boot(data, stat_fun, R = R)
-  ci <- boot.ci(boot_out, type = "perc")
-
-  if (is.null(ci)) {
-    return(c(NA, NA))
-  } else {
-    return(ci$percent[4:5])
-  }
-}
-
-#' Bootstrap confidence intervals for correlation
-#'
-#' @param x First variable
-#' @param y Second variable
-#' @param R Number of bootstrap replicates
-#' @return Vector with median correlation and CI bounds
-bootstrap_cor <- function(x, y, R = 1000) {
-  data <- data.frame(x = x, y = y)
-
-  boot_cor <- function(data, indices) {
-    d <- data[indices,]
-    if (sum(complete.cases(d)) < 4) return(NA)
-    cor(d$x, d$y, method = "spearman", use = "complete.obs")
-  }
-
-  boot_obj <- boot(data, boot_cor, R = R)
-  ci <- boot.ci(boot_obj, type = "perc")$percent[4:5]
-  median_cor <- median(boot_obj$t[!is.na(boot_obj$t)], na.rm = TRUE)
-  c(median_cor, ci[1], ci[2])
-}
-
-#' Compute rank-biserial correlation (companion to Wilcoxon test)
-#'
-#' @param x First group values
-#' @param y Second group values
-#' @return Rank-biserial correlation coefficient (r)
-#' @details
-#' Rank-biserial correlation is a non-parametric effect size measure
-#' for Mann-Whitney U / Wilcoxon rank-sum test.
-#' Formula: r = 1 - (2U)/(n1*n2)
-#' Interpretation: |r| = 0.1 (small), 0.3 (medium), 0.5 (large)
-rank_biserial_val <- function(x, y) {
-  wtest <- wilcox.test(x, y, exact = FALSE)
-  U <- as.numeric(wtest$statistic)
-  n1 <- length(x)
-  n2 <- length(y)
-  r <- 1 - (2 * U) / (n1 * n2)
-  return(r)
-}
-
-#' Bootstrap confidence intervals for rank-biserial correlation
-#'
-#' @param x First group values
-#' @param y Second group values
-#' @param R Number of bootstrap replicates (default: 1000)
-#' @return Vector with lower and upper CI bounds
-boot_rank_biserial <- function(x, y, R = 1000) {
-  data <- data.frame(
-    group = rep(c("x", "y"), times = c(length(x), length(y))),
-    value = c(x, y)
-  )
-
-  stat_fun <- function(data, indices) {
-    d_x <- data$value[indices][data$group[indices] == "x"]
-    d_y <- data$value[indices][data$group[indices] == "y"]
-    if (length(d_x) < 2 || length(d_y) < 2) return(NA)
-    return(rank_biserial_val(d_x, d_y))
-  }
-
-  boot_out <- boot(data, stat_fun, R = R)
-  ci <- boot.ci(boot_out, type = "perc")
-
-  if (is.null(ci)) {
-    return(c(NA, NA))
-  } else {
-    return(ci$percent[4:5])
-  }
-}
-
-# ========================================================================== #
 # READ DATA
 # ========================================================================== #
 
 trigeminale_data_raw <- read.csv("trigeminale_daten_corrected_translated.csv", check.names = FALSE)
 trigeminale_data <- read.csv("analysis_dataset_imputed.csv", check.names = FALSE)
+rownames(trigeminale_data_raw) <- trigeminale_data_raw$ID
+rownames(trigeminale_data) <- trigeminale_data$ID
 
 # Check if raw and imputed data are in the same order of cases
-plot(as.numeric(trigeminale_data_raw$ID)~ as.numeric(trigeminale_data$ID))
+plot(as.numeric(trigeminale_data_raw$ID) ~ as.numeric(trigeminale_data$ID))
 
 
 # ========================================================================== #
@@ -342,37 +80,7 @@ heatmap_data <- trigeminal_measures_data_scaled %>%
     values_to = "Value"
   )
 
-# Custom ggplot2 theme for publication-quality plots
-theme_plot <- function() {
-  theme_minimal(base_family = "Libre Franklin") +
-    theme(
-      plot.title = element_text(
-        face = "plain", size = 12, color = "#222222",
-        hjust = 0, margin = margin(b = 10)
-      ),
-      axis.title = element_text(face = "plain", size = 10, color = "#444444"),
-      axis.text = element_text(face = "plain", size = 10, color = "#444444"),
-      plot.caption = element_text(
-        size = 8, color = "#888888",
-        hjust = 0, margin = margin(t = 10)
-      ),
-      panel.grid.major.y = element_line(
-        color = "#dddddd", linetype = "dashed", size = 0.3
-      ),
-      panel.grid.major.x = element_blank(),
-      panel.grid.minor = element_blank(),
-      axis.line = element_line(color = "#bbbbbb", size = 0.5),
-      axis.ticks = element_line(color = "#bbbbbb", size = 0.5),
-      axis.ticks.length = unit(5, "pt"),
-      plot.background = element_rect(fill = "white", color = NA),
-      panel.background = element_rect(fill = "white", color = NA),
-      legend.position = "right",
-      legend.direction = "vertical",
-      plot.margin = margin(20, 20, 20, 20),
-      strip.background = element_blank(),
-      strip.text = element_text(face = "bold", size = 12, color = "#222222")
-    )
-}
+# NOTE: theme_plot() function now loaded from globals.R
 
 # Create comprehensive heatmap showing all measures across observations
 cat("\nGenerating overview heatmap...\n")
@@ -381,7 +89,7 @@ p_trigeminal_measures_done <- ggplot(
   aes(x = Row, y = Measure, fill = Value)
 ) +
   geom_tile() +
-  scale_fill_gradient(low = "cornsilk", high = "cornsilk4", na.value = "grey90", name = "Value [%]") +
+  scale_fill_gradient(low = actual_palette[1], high = actual_palette[4], na.value = actual_palette[5], name = "Value [%]") +
   theme_plot() +
   labs(
     x = "Observation (Subject #)",
@@ -611,7 +319,7 @@ p_table_AmmoLa_vs_CO2_most_sensitive <- ggplot(
 ) +
   geom_tile(color = "black") +
   geom_text(aes(label = Freq), color = "black", size = 6) +
-  scale_fill_gradient(low = "cornsilk1", high = "cornsilk4") +
+  scale_fill_gradient(low = actual_palette[1], high = actual_palette[4]) +
   theme_minimal() +
   labs(
     title = "Agreement of most sensitive subjects across tests",
@@ -646,7 +354,7 @@ p_table_AmmoLa_vs_lateralization_most_sensitive <- ggplot(
 ) +
   geom_tile(color = "black") +
   geom_text(aes(label = Freq), color = "black", size = 6) +
-  scale_fill_gradient(low = "cornsilk1", high = "cornsilk4") +
+  scale_fill_gradient(low = actual_palette[1], high = actual_palette[4]) +
   theme_minimal() +
   labs(
     title = "Agreement of most sensitive subjects across tests",
@@ -740,7 +448,7 @@ wilcox.test(trigeminal_measures_data$CO2_threshold[550:nrow(trigeminal_measures_
 
 cat("\nAnalyzing agreement among most sensitive subjects...\n")
 
-trigeminal_measures_data_grouped_GMM <- trigeminal_measures_data[, c(2,4,5)]
+trigeminal_measures_data_grouped_GMM <- trigeminal_measures_data[, c(2, 4, 5)]
 trigeminal_measures_data_grouped_GMM$CO2_threshold_log[1:549] <- NA
 
 # Create binary grouping: Upper mode = most sensitive vs others
@@ -943,20 +651,26 @@ sex_stats <- lapply(variables, function(var) {
   x <- x[idx]
   s <- s[idx]
 
+  # Descriptive statistics
+  mean_m <- round(mean(x[s == "m"], na.rm = TRUE), 2)
+  sd_m <- round(sd(x[s == "m"], na.rm = TRUE), 2)
+  mean_w <- round(mean(x[s == "w"], na.rm = TRUE), 2)
+  sd_w <- round(sd(x[s == "w"], na.rm = TRUE), 2)
+
   # ANOVA for eta-squared calculation
   aovmod <- aov(x ~ s)
   ss_total <- sum((x - mean(x)) ^ 2)
   ss_between <- sum(tapply(x, s, function(g) length(g) * (mean(g) - mean(x)) ^ 2))
-  eta2 <- ss_between / ss_total
+  eta2 <- round(ss_between / ss_total, 4)
 
   # Non-parametric test
   kruskal_p <- tryCatch(
-    kruskal.test(x ~ s)$p.value,
+    formatC(kruskal.test(x ~ s)$p.value, format = 'e', digits = 3),
     error = function(e) NA
   )
 
   n <- length(x)
-  data.frame(variable = var, eta2 = eta2, kruskal_p = kruskal_p, n = n)
+  data.frame(variable = var, mean_men = mean_m, sd_men = sd_m, mean_women = mean_w, sd_women = sd_w, eta2 = eta2, kruskal_p = kruskal_p, n = n)
 })
 
 sex_stats_df <- bind_rows(sex_stats) %>%
@@ -964,6 +678,8 @@ sex_stats_df <- bind_rows(sex_stats) %>%
 
 cat("\nSex effect sizes:\n")
 print(sex_stats_df)
+
+write.csv(sex_stats_df, "sex_stats_trigeminal.csv", row.names = FALSE)
 
 # ========================================================================== #
 # DISTRIBUTION PLOTS - HISTOGRAMS AND DENSITY ESTIMATES
@@ -991,9 +707,9 @@ p_distribution_non_CO2 <- ggplot(
 ) +
   geom_histogram(
     aes(y = after_stat(density)),
-    bins = 30, fill = "cornsilk3", color = "white", alpha = 0.7
+    bins = 30, fill = actual_palette[3], color = "white", alpha = 0.7
   ) +
-  geom_density(color = "cornsilk4", linewidth = 1) +
+  geom_density(color = actual_palette[4], linewidth = 1) +
   facet_wrap(~variable, scales = "free") +
   labs(
     title = "Distribution of non-CO2 related trigeminal measures",
@@ -1044,9 +760,9 @@ p_distribution_CO2 <- ggplot(
 ) +
   geom_histogram(
     aes(y = after_stat(density)),
-    fill = "cornsilk3", color = "white", alpha = 0.7
+    fill = actual_palette[3], color = "white", alpha = 0.7
   ) +
-  geom_density(color = "cornsilk4", size = 1) +
+  geom_density(color = actual_palette[4], size = 1) +
   facet_wrap(subset_group * variable ~ ., scales = "free", ncol = 2) +
   labs(
     title = "Distribution of CO2-related trigeminal measures, split by procedure",
@@ -1077,7 +793,7 @@ cat("\nGenerating Pareto Density Estimation plots...\n")
 
 # Overlay density plot for AmmoLa intensity
 p_density_AmmoLA <- ggplot(trigeminal_measures_data, aes(x = AmmoLa_intensity)) +
-  geom_density(alpha = 0.2, size = 1, fill = "cornsilk4", color = "cornsilk4") +
+  geom_density(alpha = 0.2, size = 1, fill = actual_palette[4], color = actual_palette[4]) +
   labs(title = "Distribution of AmmoLa intensity estimates",
        x = "Rating [%]", y = "Density") +
   theme_plot() +
@@ -1090,13 +806,13 @@ pPDE_AmmoLA <- PDEplotGG(trigeminal_measures_data$AmmoLa_intensity) +
   theme_plot() +
   labs(title = "Distribution of AmmoLa intensity estimates", x = "Rating [%]", y = "PDE") +
   guides(color = "none") +
-  scale_color_manual(values = "cornsilk4")
+  scale_color_manual(values = actual_palette[4])
 
 print(pPDE_AmmoLA)
 
 # Overlay density plot for AmmoLa intensity transformed
 p_density_AmmoLA_transformed <- ggplot(trigeminal_measures_data, aes(x = AmmoLa_intensity_reflect_slog)) +
-  geom_density(alpha = 0.2, size = 1, fill = "cornsilk4", color = "cornsilk4") +
+  geom_density(alpha = 0.2, size = 1, fill = actual_palette[4], color = actual_palette[4]) +
   labs(title = "Distribution of AmmoLa (transformed)", x = "Reflected log of rating [units]", y = "Density") +
   theme_plot() +
   theme(legend.position.inside = TRUE, legend.position = c(.7, .8), legend.direction = "horizontal")
@@ -1106,7 +822,7 @@ print(p_density_AmmoLA_transformed)
 
 # Overlay density plot for Lateralization
 p_density_Lateralization <- ggplot(trigeminal_measures_data, aes(x = Lateralization)) +
-  geom_density(alpha = 0.2, size = 1, fill = "cornsilk4", color = "cornsilk4") +
+  geom_density(alpha = 0.2, size = 1, fill = actual_palette[4], color = actual_palette[4]) +
   labs(title = "Distribution of lateralization successes",
        x = "Correct [count]", y = "Density") +
   theme_plot() +
@@ -1119,7 +835,7 @@ pPDE_Lateralization <- PDEplotGG(trigeminal_measures_data$Lateralization) +
   theme_plot() +
   labs(title = "Distribution of correct lateralizations", x = "Lateralization [n correct]", y = "PDE") +
   guides(color = "none") +
-  scale_color_manual(values = "cornsilk4")
+  scale_color_manual(values = actual_palette[4])
 
 print(pPDE_Lateralization)
 
@@ -1134,14 +850,36 @@ df_plot_CO2_threshold_breathing <- data.frame(
   Breath = rep(c("Uncontrolled", "Hold"), c(length(CO2_threshold_breathing), length(CO2_threshold_breath_hold)))
 )
 
+
+ad_result_CO2_thresholds_breathing <- twosamples::ad_test(df_plot_CO2_threshold_breathing$value[
+  df_plot_CO2_threshold_breathing$Breath == "Uncontrolled"], df_plot_CO2_threshold_breathing$value[
+    df_plot_CO2_threshold_breathing$Breath == "Hold"])
+
+ad_lab_breathing <- sprintf(
+  "Anderson-Darling\nA = %.3f\np = %.3g",
+  as.numeric(ad_result_CO2_thresholds_breathing[["Test Stat"]]),
+  ad_result_CO2_thresholds_breathing[["P-Value"]]
+)
+x_pos <- max(df_plot_CO2_threshold_breathing$value, na.rm = TRUE)
+y_pos <- -Inf
+
 p_breathing_CO2_thresholds <- ggplot(df_plot_CO2_threshold_breathing, aes(x = value, fill = Breath, color = Breath)) +
   geom_density(alpha = 0.2, size = 1) +
-  scale_fill_manual(values = c("cornsilk2", "cornsilk4")) +
-  scale_color_manual(values = c("cornsilk2", "cornsilk4")) +
+  scale_fill_manual(values = c(actual_palette[2], actual_palette[4])) +
+  scale_color_manual(values = c(actual_palette[2], actual_palette[4])) +
   labs(title = "CO2 Threshold: Breath uncontrolled vs hold distr.",
        x = "CO2 threshold (ms)", y = "Density") +
   theme_plot() +
-  theme(legend.position.inside = TRUE, legend.position = c(.7, .8), legend.direction = "horizontal")
+  theme(legend.position.inside = TRUE, legend.position = c(.7, .8), legend.direction = "horizontal") +
+  annotate(
+    "text",
+    x = x_pos,
+    y = y_pos,
+    label = ad_lab_breathing,
+    hjust = 1,
+    vjust = -0.2,
+    size = 3.5
+  )
 
 print(p_breathing_CO2_thresholds)
 
@@ -1162,7 +900,7 @@ pPDE_CO2 <- PDEplotGG(CO2_df_for_PDE) +
   theme_plot() +
   labs(title = "Distribution of CO2 thresholds", color = "Breath", x = "CO2 threshold (ms)", y = "PDE") +
   scale_color_manual(
-    values = c("grey83", "cornsilk4"),
+    values = c(actual_palette[5], actual_palette[4]),
     labels = c("Uncontrolled", "Hold")
   ) +
   theme(legend.position.inside = TRUE, legend.position = c(.2, .85))
@@ -1172,7 +910,7 @@ print(pPDE_CO2)
 
 # Overlay density plot for CO2 thresholds (only breath hold)
 p_density_CO2_thresholds_transformed <- ggplot(trigeminal_measures_data[550:length(trigeminal_measures_data$CO2_threshold),], aes(x = CO2_threshold_log)) +
-  geom_density(alpha = 0.2, size = 1, fill = "cornsilk4", color = "cornsilk4") +
+  geom_density(alpha = 0.2, size = 1, fill = actual_palette[4], color = actual_palette[4]) +
   labs(title = "Distribution of CO2 thresholds (transformed)", x = "log CO2 threshold (log ms)", y = "Density") +
   theme_plot() +
   theme(legend.position.inside = TRUE, legend.position = c(.7, .8), legend.direction = "horizontal")
@@ -1185,28 +923,28 @@ print(p_density_CO2_thresholds_transformed)
 library(patchwork)
 
 # 1. Extract all plots with uniform margins
-p1 <- p_density_AmmoLA + theme(plot.margin = margin(5, 5, 5, 5))
-p2 <- p_density_Lateralization + theme(plot.margin = margin(5, 5, 5, 5))
-p3 <- p_breathing_CO2_thresholds + theme(plot.margin = margin(5, 5, 5, 5))
+p1 <- p_density_AmmoLA + theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
+p2 <- p_density_Lateralization + theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
+p3 <- p_breathing_CO2_thresholds + theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
 
 p4 <- ggplot() +
   annotate("text", x = 0.5, y = 0.5, label = "No imputation\nneeded\n(complete data)",
            size = 4, hjust = 0.5, vjust = 0.5) +
   theme_void() +
-  theme(plot.margin = margin(5, 5, 5, 5))
+  theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
 
-p5 <- p_observed_imputed_Lateralization + theme(plot.margin = margin(5, 5, 5, 5))
-p6 <- p_observed_imputed_CO2_thresholds + theme(plot.margin = margin(5, 5, 5, 5))
+p5 <- p_observed_imputed_Lateralization + theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
+p6 <- p_observed_imputed_CO2_thresholds + theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
 
-p7 <- p_density_AmmoLA_transformed + theme(plot.margin = margin(5, 5, 5, 5))
+p7 <- p_density_AmmoLA_transformed + theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
 
 p8 <- ggplot() +
   annotate("text", x = 0.5, y = 0.5, label = "No transformation\n(count data)",
            size = 4, hjust = 0.5, vjust = 0.5) +
   theme_void() +
-  theme(plot.margin = margin(5, 5, 5, 5))
+  theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
 
-p9 <- p_density_CO2_thresholds_transformed + theme(plot.margin = margin(5, 5, 5, 5))
+p9 <- p_density_CO2_thresholds_transformed + theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
 
 # 2. Build layout with panel labels (skip placeholders p4 and p8)
 p_combined_psychophysical_trig_measures_obs <-
@@ -1219,7 +957,7 @@ p_combined_psychophysical_trig_measures_obs <-
     widths = c(1, 1, 1),
     tag_level = 'new'
   ) &
-  theme(plot.margin = margin(5, 5, 5, 5))
+  theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
 
 # Add tags manually to non-placeholder plots
 p_combined_psychophysical_trig_measures_obs[[1]] <- p_combined_psychophysical_trig_measures_obs[[1]] + ggtitle("A") + theme(plot.title = element_text(face = "bold", hjust = 0))
@@ -1325,32 +1063,18 @@ print(cor_results)
 corr_mat <- cor_results$r # Correlation coefficients
 p_mat <- cor_results$p # P-values
 
-#' Convert p-values to significance stars
-signif_code <- function(p) {
-  if (is.na(p)) ""
-  else if (p < 0.001) "***"
-  else if (p < 0.01) "**"
-  else if (p < 0.05) "*"
-  else ""
-}
+# NOTE: signif_code() and text_color_fun() now loaded from globals.R
 
 # Define color palette for correlation heatmap (NYT-inspired)
 breaks <- seq(-1, 1, by = 0.1)
 nyt_colors <- c("ghostwhite", "#f5f5dc", "#ede8d0",
-                "cornsilk", "cornsilk2", "cornsilk3", "cornsilk4")
+                actual_palette[1], actual_palette[2], actual_palette[3], actual_palette[4])
 color_vec <- colorRampPalette(c(rev(nyt_colors), nyt_colors))(length(breaks))
 col_fun <- colorRamp2(breaks, color_vec)
 
-#' Determine text color based on background brightness
-text_color_fun <- function(fill_color) {
-  rgb_val <- col2rgb(fill_color) / 255
-  brightness <- 0.299 * rgb_val[1,] + 0.587 * rgb_val[2,] + 0.114 * rgb_val[3,]
-  ifelse(brightness > 0.6, "#111111", "#FFFFFF")
-}
-
 #' Create correlation heatmap with ComplexHeatmap
 create_heatmap_trig <- function() {
-  ht <- Heatmap(
+  ht <- ComplexHeatmap::Heatmap(
     corr_mat,
     name = "Correlation",
     col = col_fun,
@@ -1400,17 +1124,17 @@ p_title <- ggplot() +
   theme(
     plot.title = element_text(
       face = "plain", size = 12, color = "#222222",
-      hjust = 0, margin = margin(b = 10)
+      hjust = 0, margin = ggplot2::margin(b = 10)
     ),
     plot.background = element_rect(fill = "white", color = NA),
     panel.background = element_rect(fill = "white", color = NA),
-    plot.margin = margin(20, 20, 0, 20)
+    plot.margin = ggplot2::margin(20, 20, 0, 20)
   ) +
   theme_void() +
   theme(
     plot.title = element_text(
       face = "plain", size = 12, color = "#222222",
-      hjust = 0, margin = margin(b = 5)
+      hjust = 0, margin = ggplot2::margin(b = 5)
     ),
     axis.text.x = element_text(angle = 45, hjust = 1)
   )
@@ -1427,7 +1151,7 @@ print(corr_plot)
 # ggsave("trigeminal_correlation_heatmap.svg", corr_plot, width = 8, height = 9)
 
 
-# For comparison, do the violin plot for the AmmoLa_High_low tareg
+# For comparison, do the violin plot for the AmmoLa_High_low target
 
 # Classes
 trigeminal_ammola_high_low_data <- cbind.data.frame(Class = as.factor(trigeminal_measures_data_grouped$AmmoLa_intensity),
@@ -1444,6 +1168,8 @@ head(trigeminal_ammola_high_low_data_long)
 
 round(apply(trigeminal_ammola_high_low_data[, -1], 2, function(x) wilcox.test(x ~ trigeminal_ammola_high_low_data$Class, na.rm = TRUE)$p.value), 2)
 
+# Write classes for later use
+write.csv(cbind.data.frame(ID = trigeminale_data$ID, Class = trigeminal_measures_data_grouped$AmmoLa_intensity), file = "AmmoLa_classes.csv")
 
 # Dodge width for positioning (same as in jitterdodge and boxplot)
 dodge_width <- 0.8
@@ -1469,17 +1195,17 @@ geom_line(data = median_data, aes(x = x_position, y = median_value, group = vari
             color = "black", size = 0.8, linetype = "dashed", inherit.aes = FALSE) +
   facet_wrap(variable ~ ., nrow = 3, scales = "free", labeller = label_wrap_gen(width = 20)) +
   guides(color = "none") +
-  scale_color_manual(values = c("cornsilk3", "cornsilk4")) +
-  scale_fill_manual(values = c("cornsilk4", "cornsilk4")) +
+  scale_color_manual(values = c(actual_palette[3], actual_palette[4])) +
+  scale_fill_manual(values = c(actual_palette[2], actual_palette[4])) +
   labs(title = "Raw trigeminal data per variable and AmmoLa sensitvity class", fill = "Class", x = NULL) +
   theme_plot() +
   theme(
     legend.direction = "horizontal",
-    legend.position.inside = TRUE, legend.position = c(0.2, 0.2),
+    legend.position.inside = TRUE, legend.position = c(0.26, 0.2), legend.key.height = unit(3, "cm"),
     legend.background = element_rect(fill = ggplot2::alpha("white", 0.6), color = NA),
-    strip.background = element_rect(fill = "cornsilk"),
+    strip.background = element_rect(fill = actual_palette[1]),
     strip.text = element_text(size = 6, lineheight = 0.9, face = "plain"),
-    plot.margin = margin(t = 5, r = 5, b = 5, l = 5) ,
+    plot.margin = ggplot2::margin(t = 5, r = 5, b = 5, l = 5),
     axis.text.x = element_blank(), # Remove x axis tick labels
     axis.ticks.x = element_blank() # Remove x axis ticks (optional)
   ) +
@@ -1489,32 +1215,7 @@ print(p_trigeminal_ammola_high_low_data)
 
 
 
-# Define helper function to compute Cohen's d for two numeric vectors
-cohen_d_val <- function(x, y) {
-  effsize::cohen.d(x, y, hedges.correction = TRUE)$estimate
-}
-
-# Bootstrap function for Cohen's d
-boot_cohen_d <- function(x, y, R = 1000) {
-  data <- data.frame(group = rep(c("x", "y"), times = c(length(x), length(y))),
-                     value = c(x, y))
-
-  stat_fun <- function(data, indices) {
-    d_x <- data$value[indices][data$group[indices] == "x"]
-    d_y <- data$value[indices][data$group[indices] == "y"]
-    if (length(d_x) < 2 || length(d_y) < 2) return(NA)
-    return(cohen_d_val(d_x, d_y))
-  }
-
-  boot_out <- boot(data, stat_fun, R = R)
-
-  ci <- boot.ci(boot_out, type = "perc")
-  if (is.null(ci)) {
-    return(c(NA, NA))
-  } else {
-    return(ci$percent[4:5])
-  }
-}
+# NOTE: cohen_d_val() and boot_cohen_d() now loaded from globals.R
 
 # List variables
 variables <- unique(trigeminal_ammola_high_low_data_long$variable)
@@ -1539,9 +1240,10 @@ results_cohen_AmmoLa <- map_df(variables, function(var) {
   tibble(variable = var, d = d, ci_lower = ci[1], ci_upper = ci[2])
 })
 
+
 # Plot Cohen's d with CI error bars
 p_cohens_d_AmmoLa_gigh_low <- ggplot(results_cohen_AmmoLa, aes(x = reorder(variable, d), y = d)) +
-  geom_col(fill = "cornsilk3") +
+  geom_col(fill = actual_palette[3]) +
   geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0.2) +
   coord_flip() +
   labs(title = "Cohen's d (95% CI)",
@@ -1550,7 +1252,17 @@ p_cohens_d_AmmoLa_gigh_low <- ggplot(results_cohen_AmmoLa, aes(x = reorder(varia
   theme_plot() +
   geom_hline(yintercept = -0.8, linetype = "dashed", color = "salmon") +
   geom_hline(yintercept = 0, linetype = "dotted", color = "grey55") +
-  scale_x_discrete(labels = function(x) stringr::str_wrap(x, width = 35))
+  scale_x_discrete(labels = function(x) stringr::str_wrap(x, width = 35)) +
+  annotate(
+    "text",
+    y = -0.8,
+    x = 3,
+    label = "large",
+    angle = 90,
+    hjust = -0.2,
+    vjust = -1.2,
+    size = 3.5,
+    color = c("salmon"))
 
 
 p_cohens_d_AmmoLa_gigh_low
@@ -1578,17 +1290,20 @@ results_rank_biserial_AmmoLa <- map_df(variables, function(var) {
 
 # Plot rank-biserial correlation with CI error bars
 p_rank_biserial_AmmoLa_high_low <- ggplot(results_rank_biserial_AmmoLa, aes(x = reorder(variable, r), y = r)) +
-  geom_col(fill = "cornsilk3") +
+  geom_col(fill = actual_palette[3]) +
   geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0.2) +
   coord_flip() +
   labs(title = "Rank-biserial correlation (95% CI)",
        y = "Rank-biserial r",
        x = "Variables") +
   theme_plot() +
-  geom_hline(yintercept = -0.5, linetype = "dashed", color = "salmon") +
   geom_hline(yintercept = 0, linetype = "dotted", color = "grey55") +
   geom_hline(yintercept = 0.5, linetype = "dashed", color = "salmon") +
   scale_x_discrete(labels = function(x) stringr::str_wrap(x, width = 35))
+
+if (any(results_rank_biserial_AmmoLa$r, results_rank_biserial_AmmoLa$ci_lower, results_rank_biserial_AmmoLa$ci_upper) < 0.4)
+  p_rank_biserial_AmmoLa_high_low <- p_rank_biserial_AmmoLa_high_low + geom_hline(yintercept = -0.5, linetype = "dashed", color = "salmon")
+
 
 p_rank_biserial_AmmoLa_high_low
 
@@ -1675,7 +1390,7 @@ library(patchwork)
 library(dplyr)
 
 # Reorder violin plot to match Cohen's d (largest |d| first)
-p_cohens_d_ordered <- p_cohens_d_AmmoLa_gigh_low  # already ordered by effect size
+p_cohens_d_ordered <- p_cohens_d_AmmoLa_gigh_low # already ordered by effect size
 
 # Get the variable order from Cohen's d plot
 variable_order <- results_cohen_AmmoLa %>%
@@ -1698,17 +1413,17 @@ p_trigeminal_ordered <- ggplot(trigeminal_ammola_high_low_data_long, aes(x = var
                              vjust = -0.2, size = 3) +
   facet_wrap(variable ~ ., nrow = 3, scales = "free", labeller = label_wrap_gen(width = 20)) +
   guides(color = "none") +
-  scale_color_manual(values = c("cornsilk3", "cornsilk4")) +
-  scale_fill_manual(values = c("cornsilk4", "cornsilk4")) +
+  scale_color_manual(values = c(actual_palette[3], actual_palette[4])) +
+  scale_fill_manual(values = c(actual_palette[4], actual_palette[4])) +
   labs(title = "Distributions by AmmoLa sensitivity class", fill = "Class", x = NULL) +
   theme_plot() +
   theme(
     legend.direction = "horizontal",
-    legend.position.inside = TRUE, legend.position = c(0.2, 0.2),
+    legend.position.inside = TRUE, legend.position = c(0.26, 0.2), legend.key.height = unit(3, "cm"),
     legend.background = element_rect(fill = ggplot2::alpha("white", 0.6), color = NA),
-    strip.background = element_rect(fill = "cornsilk"),
+    strip.background = element_rect(fill = actual_palette[1]),
     strip.text = element_text(size = 6, lineheight = 0.9, face = "plain"),
-    plot.margin = margin(t = 5, r = 5, b = 5, l = 5) ,
+    plot.margin = ggplot2::margin(t = 5, r = 5, b = 5, l = 5),
     axis.text.x = element_blank(), # Remove x axis tick labels
     axis.ticks.x = element_blank() # Remove x axis ticks (optional)
   ) +
@@ -1717,14 +1432,14 @@ p_trigeminal_ordered <- ggplot(trigeminal_ammola_high_low_data_long, aes(x = var
 # Combine: Cohen's d (left, flipped) + violin plots (right)
 p_combined_effect_sizes <- cowplot::plot_grid(
   p_cohens_d_ordered,
-  p_trigeminal_ordered ,
+  p_trigeminal_ordered,
   labels = "AUTO",
   align = "h", axis = "tb",
-  rel_widths = c(1,2)
+  rel_widths = c(1, 2)
 )
 print(p_combined_effect_sizes)
-ggsave("p_trigeminal_ammola_effect_sizes.svg", p_combined_effect_sizes, width = 17, height = 15, dpi = 300,limitsize = FALSE)
-ggsave("p_trigeminal_ammola_effect_sizes.png", p_combined_effect_sizes, width = 17, height = 15, dpi = 300,limitsize = FALSE)
+ggsave("p_trigeminal_ammola_effect_sizes.svg", p_combined_effect_sizes, width = 17, height = 15, dpi = 300, limitsize = FALSE)
+ggsave("p_trigeminal_ammola_effect_sizes.png", p_combined_effect_sizes, width = 17, height = 15, dpi = 300, limitsize = FALSE)
 
 # ========================================================================== #
 # RANK-BISERIAL VERSION: Alternative combined figure with rank-biserial
@@ -1802,7 +1517,7 @@ ggsave(
 )
 
 # Reorder violin plot to match rank-biserial (largest |r| first)
-p_rank_biserial_ordered <- p_rank_biserial_AmmoLa_high_low  # already ordered by effect size
+p_rank_biserial_ordered <- p_rank_biserial_AmmoLa_high_low # already ordered by effect size
 
 # Get the variable order from rank-biserial plot
 variable_order_rb <- results_rank_biserial_AmmoLa %>%
@@ -1815,6 +1530,15 @@ trigeminal_ammola_high_low_data_long_rb <- trigeminal_ammola_high_low_data_long
 trigeminal_ammola_high_low_data_long_rb$variable <- factor(trigeminal_ammola_high_low_data_long_rb$variable,
                                                            levels = variable_order_rb)
 
+# Calculate medians for trend lines
+median_data_1 <- trigeminal_ammola_high_low_data_long_rb %>%
+  group_by(variable, Class) %>%
+  dplyr::summarise(median_value = mean(value, na.rm = TRUE), .groups = "drop")
+
+# Generate dodged x-positions for median lines (0.8, 1.2, 1.6, etc.)
+positions <- c(0.8, 1.2)
+median_data_1$x_position <- rep(positions, times = n_distinct(trigeminal_ammola_high_low_data_long_rb$variable))
+
 # Recreate violin plot with new order (rank-biserial)
 p_trigeminal_ordered_rb <- ggplot(trigeminal_ammola_high_low_data_long_rb, aes(x = variable, y = value, color = Class, fill = Class)) +
   geom_violin(alpha = 0.05, width = 0.6, position = position_dodge(width = 0.8)) +
@@ -1824,43 +1548,47 @@ p_trigeminal_ordered_rb <- ggplot(trigeminal_ammola_high_low_data_long_rb, aes(x
   ggpubr::stat_compare_means(aes(label = paste0("p = ", after_stat(p.format))),
                              label.y.npc = "top",
                              vjust = -0.2, size = 3) +
+  geom_line(data = median_data, aes(x = x_position, y = median_value, group = variable),
+            color = "black", size = 0.8, linetype = "dashed", inherit.aes = FALSE) +
   facet_wrap(variable ~ ., nrow = 3, scales = "free", labeller = label_wrap_gen(width = 20)) +
   guides(color = "none") +
-  scale_color_manual(values = c("cornsilk3", "cornsilk4")) +
-  scale_fill_manual(values = c("cornsilk4", "cornsilk4")) +
+  scale_color_manual(values = c(actual_palette[3], actual_palette[4])) +
+  scale_fill_manual(values = c(actual_palette[4], actual_palette[4])) +
   labs(title = "Distributions by AmmoLa sensitivity class", fill = "Class", x = NULL) +
   theme_plot() +
   theme(
     legend.direction = "horizontal",
-    legend.position.inside = TRUE, legend.position = c(0.2, 0.2),
+    legend.position.inside = TRUE, legend.position = c(0.26, 0.2), legend.key.height = unit(3, "cm"),
     legend.background = element_rect(fill = ggplot2::alpha("white", 0.6), color = NA),
-    strip.background = element_rect(fill = "cornsilk"),
+    strip.background = element_rect(fill = actual_palette[1]),
     strip.text = element_text(size = 6, lineheight = 0.9, face = "plain"),
-    plot.margin = margin(t = 5, r = 5, b = 5, l = 5) ,
+    plot.margin = ggplot2::margin(t = 5, r = 5, b = 5, l = 5),
     axis.text.x = element_blank(),
     axis.ticks.x = element_blank()
   ) +
   guides(color = "none")
 
+
+
 # Combine: rank-biserial (left, flipped) + violin plots (right)
 
 
 # Uniform margins only
-p_left <- p_rank_biserial_ordered + theme(plot.margin = margin(5, 5, 5, 5))
-p_right <- p_trigeminal_ordered_rb + theme(plot.margin = margin(5, 5, 5, 5))
+p_left <- p_rank_biserial_ordered + theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
+p_right <- p_trigeminal_ordered_rb + theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
 
 # patchwork horizontal + BIG A B LABELS + original titles preserved
 p_combined_effect_sizes_rb <- (p_left | p_right) +
   plot_layout(widths = c(1, 2)) +
   plot_annotation(
-    title = "Group differences across AmmoLa sensitivity classes",
+    title = "Group differences across AmmoLa sensitivity classes (non-imputed observations)",
     tag_levels = list(c("A", "B")),
     theme = theme(
       plot.title = element_text(size = 14, hjust = 0),
       plot.tag = element_text(face = "bold", size = 16)
     )
   ) &
-  theme(plot.margin = margin(5, 5, 5, 5))
+  theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
 
 print(p_combined_effect_sizes_rb)
 ggsave("p_trigeminal_ammola_effect_sizes_rank_biserial.svg", p_combined_effect_sizes_rb, width = 17, height = 15, dpi = 300, limitsize = FALSE)
@@ -1879,11 +1607,12 @@ ggsave("p_trigeminal_ammola_effect_sizes_rank_biserial.png", p_combined_effect_s
 variables_for_clustering_imputed_all <- trigeminale_data[, intersect(names(trigeminale_data), variables_by_categories$Nasal_chemosensory_perception)]
 
 heat_matrix_all <- cbind.data.frame(variables_for_clustering_imputed_all,
-                                    AmmoLa_transformed =  scaleRange_01(reflect_slog_unflipped(trigeminale_data$`AmmoLa intensity`)) * 3,
-                                    Lateralization =  scaleRange_01(trigeminale_data$`Lateralization (x/20)`) * 3,
-                                    CO2_threshold_transformed =  scaleRange_01(-slog(trigeminale_data$`CO2 threshold`)) * 3
+                                    AmmoLa_transformed = scaleRange_01(reflect_slog_unflipped(trigeminale_data$`AmmoLa intensity`)) * 3,
+                                    Lateralization = scaleRange_01(trigeminale_data$`Lateralization (x/20)`) * 3,
+                                    CO2_threshold_transformed = scaleRange_01(-slog(trigeminale_data$`CO2 threshold`)) * 3
                                 )
 
+write.csv(heat_matrix_all, "heat_matrix_all_4_PCA.csv")
 
 # Perform PCA on the imputed clustering data
 res.pca_trigeminal_clustered_data <- FactoMineR::PCA(heat_matrix_all, scale.unit = TRUE, graph = TRUE, ncp = Inf)
@@ -1897,7 +1626,8 @@ eig <- res.pca_trigeminal_clustered_data$eig
 std_dev <- sqrt(eig[, 1])
 prop_var <- eig[, 2] / 100
 cum_var <- eig[, 3] / 100
-n_comp <- length(which(eig[,1] >= 1))
+n_comp <- length(which(eig[, 1] >= 1))
+cum_var[n_comp] * 100
 
 summary_table <- round(data.frame(
   Eigenvalue = eig[, 1],
@@ -1923,11 +1653,11 @@ print(res.pca_trigeminal_clustered_data$eig)
 cat("PCA Variable Contributions:\n")
 print(res.pca_trigeminal_clustered_data$var)
 
-df_pca_voronoi <- cbind.data.frame(Class = trigeminal_ammola_high_low_data$Class, res.pca_trigeminal_clustered_data$ind$coord[,1:2])
+df_pca_voronoi <- cbind.data.frame(Class = trigeminal_ammola_high_low_data$Class, res.pca_trigeminal_clustered_data$ind$coord[, 1:2])
 
 p_pca_voronoi <- VoronoiBiomedPlot::create_voronoi_plot(data = df_pca_voronoi, class_column = "Class") +
-  scale_color_manual(values = c("cornsilk3", "cornsilk4")) +
-  scale_fill_manual(values = c("cornsilk", "cornsilk4"))
+  scale_color_manual(values = c(actual_palette[3], actual_palette[4])) +
+  scale_fill_manual(values = c(actual_palette[1], actual_palette[4]))
 
 print(p_pca_voronoi)
 
@@ -1941,7 +1671,7 @@ pScree <-
                                      ncp = 100,
                                      choice = "variance",
                                      addlabels = T,
-                         barfill = c(rep("cornsilk", sum(eig[, 1] > 1)), rep("ghostwhite", sum(eig[, 1] <= 1))), barcolor = "cornsilk3", baralpha = 0.7) +
+                         barfill = c(rep(actual_palette[1], sum(eig[, 1] > 1)), rep("ghostwhite", sum(eig[, 1] <= 1))), barcolor = actual_palette[3], baralpha = 0.7) +
   theme_plot() +
   labs(title = "PCA Scree Plot")
 #ylim(0, 1.1 * max(res.pca$eig[, 2]))
@@ -1962,7 +1692,7 @@ var.coord <- as.data.frame(loadings[, 1:2])
 names(var.coord) <- c("Dim1", "Dim2")
 
 # contribution per variable (same as fviz_pca_var uses internally)
-var.contrib <- rowSums(loadings[, 1:2]^2)
+var.contrib <- rowSums(loadings[, 1:2] ^ 2)
 var.coord$contrib <- var.contrib
 
 # 2. Wrap long labels
@@ -1972,14 +1702,14 @@ var.coord$label <- str_wrap(long_names, width = 22)
 # 3. Build the biplot from scratch (arrows + labels, same gradient)
 pBiplot <-
   ggplot(var.coord, aes(Dim1, Dim2, color = contrib)) +
-  # Arrows
-  geom_segment(
+# Arrows
+geom_segment(
     aes(x = 0, y = 0, xend = Dim1, yend = Dim2),
     arrow = arrow(length = unit(0.2, "cm")),
     alpha = 0.7
   ) +
-  # Labels colored by the same contribution
-  geom_text_repel(
+# Labels colored by the same contribution
+geom_text_repel(
     aes(label = label),
     segment.alpha = 0.5,
     size = 3,
@@ -1987,8 +1717,8 @@ pBiplot <-
     max.iter = 5000,
     nudge_y = 0.05
   ) +
-  # Use exactly your gradient
-  scale_color_gradientn(
+# Use exactly your gradient
+scale_color_gradientn(
     colours = c("grey20", "sienna3", "red"),
     name = "Contribution"
   ) +
@@ -2004,21 +1734,14 @@ pBiplot <-
 # PCA VARIABLE CONTRIBUTION PLOTS
 # ========================================================================== #
 
-pContrib_dim1 <-
-  factoextra::fviz_contrib(res.pca_trigeminal_clustered_data, choice = "var", axes = 1,
-                         fill = "cornsilk1", color = "cornsilk3",
-                         ncp = sum(res.pca$eig[, 1] > 1)) +
+pContrib_dims <- lapply(1:n_comp, function(dimen) {
+pContrib_dim <-
+  factoextra::fviz_contrib(res.pca_trigeminal_clustered_data, choice = "var", axes = dimen,
+                         fill = actual_palette[1], color = actual_palette[3]) +
   theme_plot() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-  labs(title = paste0("PCA variable contribution to PC1"), x = NULL)
-
-pContrib_dim2 <-
-  factoextra::fviz_contrib(res.pca_trigeminal_clustered_data, choice = "var", axes = 2,
-                           fill = "cornsilk1", color = "cornsilk3",
-                           ncp = sum(res.pca$eig[, 1] > 1)) +
-  theme_plot() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-  labs(title = paste0("PCA variable contribution to PC2"), x = NULL)
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 5)) +
+  labs(title = paste0("PCA variable contribution to PC", dimen), x = NULL)
+})
 
 
 # ========================================================================== #
@@ -2026,6 +1749,117 @@ pContrib_dim2 <-
 # ========================================================================== #
 
 cat("\nCalculating correlation matrix for clustered variables...\n")
+
+# NOTE: bootstrap_cor() now loaded from globals.R
+
+# Column indexing
+variables <- colnames(heat_matrix_all)
+ci_results <- data.frame(
+  Var1 = character(), Var2 = character(), Median = numeric(),
+  CI_lower = numeric(), CI_upper = numeric(), n_complete = integer(),
+  stringsAsFactors = FALSE
+)
+
+# Parallel bootstrap
+cor_pairs <- combn(seq_along(variables), 2, simplify = FALSE)
+
+ci_results <- pbmclapply(cor_pairs, function(pair_idx) {
+  i <- pair_idx[1];
+  j <- pair_idx[2]
+  x_vals <- heat_matrix_all[[variables[i]]]
+  y_vals <- heat_matrix_all[[variables[j]]]
+  boot_result <- bootstrap_cor(x_vals, y_vals)
+
+  data.frame(
+    Var1 = variables[i], Var2 = variables[j],
+    Median = boot_result[1], CI_lower = boot_result[2],
+    CI_upper = boot_result[3],
+    n_complete = sum(complete.cases(x_vals, y_vals)),
+    stringsAsFactors = FALSE
+  )
+}, mc.cores = parallel::detectCores() - 1) %>% bind_rows()
+
+# plot_df - sorting that survives coord_flip()
+plot_df <- ci_results %>%
+  filter(!is.na(Median)) %>%
+  mutate(
+    Pair = paste0(Var1, " - ", Var2),
+    abs_median = abs(Median)
+  ) %>%
+  arrange(desc(abs_median)) %>%
+# CRITICAL: Set levels in REVERSE order for coord_flip()
+mutate(Pair = factor(Pair, levels = rev(Pair))) %>%
+  ungroup()
+
+# Verify sorting is correct
+print(head(plot_df[, c("Pair", "Median", "abs_median")], 200))
+
+# Show only effects d >= 0.1 which are at least consistently small and not negligible
+which_at_least_small <- which(plot_df$CI_upper * plot_df$CI_lower > 0 &
+                                ((plot_df$CI_lower >= 0.1 & plot_df$CI_upper >= 0.1) | (plot_df$CI_lower <= -0.1 & plot_df$CI_upper <= -0.1))
+)
+
+#Filter for at least small effects
+plot_df_f <- plot_df[which_at_least_small,]
+
+plot_df_f <- plot_df[which_at_least_small,] %>%
+  mutate(Pair = factor(Pair, levels = levels(plot_df$Pair))) %>%
+  droplevels()
+
+# plot_df_f <- plot_df_f %>%
+#   mutate(xpos = as.numeric(Pair))
+# Plot + Cohen (1988) thresholds
+p_cor_ci <- ggplot(plot_df_f, aes(x = Pair, y = Median)) +
+  geom_vline(
+    xintercept = seq(1.5, length(unique(plot_df_f$Pair)) - 0.5, by = 1),
+    color = actual_palette[5], linewidth = 0.3, alpha = 0.5
+  ) +
+# Cohen (1988) thresholds
+geom_hline(yintercept = 0.5, color = "salmon", linetype = "dashed",
+             linewidth = 0.6, alpha = 0.8) +
+  geom_hline(yintercept = 0.3, color = "orange", linetype = "dashed",
+             linewidth = 0.6, alpha = 0.6) +
+  geom_hline(yintercept = 0.1, color = "gold", linetype = "dashed",
+             linewidth = 0.6, alpha = 0.6) +
+  geom_hline(yintercept = -0.1, color = "gold", linetype = "dashed",
+             linewidth = 0.6, alpha = 0.6) +
+  geom_hline(yintercept = -0.3, color = "orange", linetype = "dashed",
+             linewidth = 0.6, alpha = 0.6) +
+  geom_hline(yintercept = -0.5, color = "salmon", linetype = "dashed",
+             linewidth = 0.6, alpha = 0.8) +
+  geom_hline(yintercept = 0, color = "grey50", linetype = "solid",
+             linewidth = 0.4) +
+  geom_rect(
+    aes(xmin = as.numeric(Pair) - 0.45, xmax = as.numeric(Pair) + 0.45,
+        ymin = CI_lower, ymax = CI_upper),
+    fill = actual_palette[3], color = "black", alpha = 0.7, linewidth = 0.2
+  ) +
+  geom_segment(
+    aes(x = as.numeric(Pair) - 0.35, xend = as.numeric(Pair) + 0.35,
+        y = Median, yend = Median),
+    linewidth = 1, color = "black"
+  ) +
+  coord_flip(ylim = c(-0.8, 0.8)) +
+  labs(
+    x = "Variable pairs (sorted by |ρ|, highest on top)",
+    y = "Spearman ρ (bootstrap median)",
+    title = "Spearman correlation CIs with Cohen (1988) effect size thresholds",
+    caption = paste(
+      "Dashed lines: |r| < 0.1 very small, 0.1 ≤ |r| < 0.3 small,",
+      "0.3 ≤ |r| < 0.5 moderate, |r| ≥ 0.5 large (Cohen, 1988)."
+    )
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.y = element_text(size = 8),
+    axis.text.x = element_text(size = 8),
+    plot.margin = ggplot2::margin(l = 80, r = 20, t = 10, b = 40, unit = "pt"),
+    plot.caption = element_text(hjust = 0, size = 8)
+  )
+
+print(p_cor_ci)
+
+# Calculate single correlation matrix
 
 
 # Calculate Spearman correlations with p-values
@@ -2035,10 +1869,20 @@ print(cor_results_clustered_variables)
 corr_mat_clustered_variables <- cor_results_clustered_variables$r # Correlation coefficients
 p_mat_clustered_variables <- cor_results_clustered_variables$p # P-values
 
+rownames(corr_mat_clustered_variables) <- stringr::str_wrap(rownames(corr_mat_clustered_variables), width = 35)
+colnames(corr_mat_clustered_variables) <- stringr::str_wrap(colnames(corr_mat_clustered_variables), width = 35)
+
+diag(corr_mat_clustered_variables) <- NA
+diag(corr_mat_clustered_variables) <- NA
+
+
+plot_df_f2 <- plot_df_f
+plot_df_f2$Var1 <- stringr::str_wrap(plot_df_f2$Var1, width = 35)
+plot_df_f2$Var2 <- stringr::str_wrap(plot_df_f2$Var2, width = 35)
 
 # Create correlation heatmap with ComplexHeatmap
 create_heatmap_corr_trig_clustered_variables <- function() {
-  ht <- Heatmap(
+  ht <- ComplexHeatmap::Heatmap(
     corr_mat_clustered_variables,
     name = "Correlation",
     col = col_fun,
@@ -2057,7 +1901,18 @@ create_heatmap_corr_trig_clustered_variables <- function() {
       pval <- p_mat_clustered_variables[i, j]
       star <- signif_code(pval)
       lbl <- paste0(val, star)
-      col_txt <- text_color_fun(fill)
+
+      # Check if this cell is in plot_df_f
+      row_name <- rownames(corr_mat_clustered_variables)[i]
+      col_name <- colnames(corr_mat_clustered_variables)[j]
+
+      is_highlighted <- any(
+        (plot_df_f2$Var1 == row_name & plot_df_f2$Var2 == col_name) |
+        (plot_df_f2$Var1 == col_name & plot_df_f2$Var2 == row_name)
+      )
+
+      # Use red text for highlighted pairs, otherwise use normal color function
+      col_txt <- if (is_highlighted) "red" else text_color_fun(fill)
       grid.text(lbl, x, y, gp = gpar(fontsize = 10, col = col_txt))
     },
     rect_gp = gpar(col = NA),
@@ -2091,10 +1946,10 @@ p_title_corr <- ggplot() +
   theme(
     plot.title = element_text(
       face = "plain", size = 12, color = "#222222",
-      hjust = 0, margin = margin(b = 5, t = 5)
+      hjust = 0, margin = ggplot2::margin(b = 5, t = 5)
     ),
     plot.background = element_rect(fill = "white", color = NA),
-    plot.margin = margin(0, 20, 0, 10, unit = "pt") # Much smaller margins
+    plot.margin = ggplot2::margin(0, 20, 0, 10, unit = "pt") # Much smaller margins
   )
 
 # Combine title and heatmap
@@ -2107,121 +1962,12 @@ corr_plot_clustered_variables <- plot_grid(
 ) #+ coord_fixed(ratio = 1)
 
 print(corr_plot_clustered_variables)
-# ggsave("trigeminal_correlation_heatmap_clustered_variables.svg", corr_plot_clustered_variables, width = 16, height = 20)
-
-# Bootstrap function (unchanged)
-bootstrap_cor <- function(x, y, R = 1000) {
-  data <- data.frame(x = x, y = y)
-  boot_cor <- function(data, indices) {
-    d <- data[indices,]
-    if (sum(complete.cases(d)) < 4) return(NA)
-    cor(d$x, d$y, method = "spearman", use = "complete.obs")
-  }
-  boot_obj <- boot(data, boot_cor, R = R)
-  ci <- boot.ci(boot_obj, type = "perc")$percent[4:5]
-  median_cor <- median(boot_obj$t[!is.na(boot_obj$t)], na.rm = TRUE)
-  c(median_cor, ci[1], ci[2])
-}
-
-# Fix column indexing + PARALLEL VERSION
-variables <- colnames(heat_matrix_all)
-ci_results <- data.frame(
-  Var1 = character(), Var2 = character(), Median = numeric(),
-  CI_lower = numeric(), CI_upper = numeric(), n_complete = integer(),
-  stringsAsFactors = FALSE
-)
-
-# Parallel bootstrap (Linux-friendly)
-cor_pairs <- combn(seq_along(variables), 2, simplify = FALSE)
-
-ci_results <- pbmclapply(cor_pairs, function(pair_idx) {
-  i <- pair_idx[1];
-  j <- pair_idx[2]
-  x_vals <- heat_matrix_all[[variables[i]]] # [[ ]] fixes column selection
-  y_vals <- heat_matrix_all[[variables[j]]]
-  boot_result <- bootstrap_cor(x_vals, y_vals)
-
-  data.frame(
-    Var1 = variables[i], Var2 = variables[j],
-    Median = boot_result[1], CI_lower = boot_result[2],
-    CI_upper = boot_result[3],
-    n_complete = sum(complete.cases(x_vals, y_vals)),
-    stringsAsFactors = FALSE
-  )
-}, mc.cores = parallel::detectCores() - 1) %>% bind_rows() # Adjust mc.cores as needed
-
-# FIXED plot_df - proper sorting that survives coord_flip()
-plot_df <- ci_results %>%
-  filter(!is.na(Median)) %>%
-  mutate(
-    Pair = paste0(Var1, " - ", Var2),
-    abs_median = abs(Median)
-  ) %>%
-  arrange(desc(abs_median)) %>%
-# CRITICAL: Set levels in REVERSE order for coord_flip()
-mutate(Pair = factor(Pair, levels = rev(Pair))) %>%
-  ungroup()
-
-# Verify sorting is correct
-print(head(plot_df[, c("Pair", "Median", "abs_median")], 200))
-
-# Plot + Cohen (1988) thresholds
-p_cor_ci <- ggplot(plot_df, aes(x = Pair, y = Median)) +
-  geom_vline(
-    xintercept = seq(1.5, length(unique(plot_df$Pair)) - 0.5, by = 1),
-    color = "grey90", linewidth = 0.3, alpha = 0.5
-  ) +
-  # Cohen (1988) thresholds
-  geom_hline(yintercept = 0.5,  color = "salmon", linetype = "dashed",
-             linewidth = 0.6, alpha = 0.8) +
-  geom_hline(yintercept = 0.3,  color = "orange", linetype = "dashed",
-             linewidth = 0.6, alpha = 0.6) +
-  geom_hline(yintercept = 0.1,  color = "gold",   linetype = "dashed",
-             linewidth = 0.6, alpha = 0.6) +
-  geom_hline(yintercept = -0.1, color = "gold",   linetype = "dashed",
-             linewidth = 0.6, alpha = 0.6) +
-  geom_hline(yintercept = -0.3, color = "orange", linetype = "dashed",
-             linewidth = 0.6, alpha = 0.6) +
-  geom_hline(yintercept = -0.5, color = "salmon", linetype = "dashed",
-             linewidth = 0.6, alpha = 0.8) +
-  geom_hline(yintercept = 0, color = "grey50", linetype = "solid",
-             linewidth = 0.4) +
-  geom_rect(
-    aes(xmin = as.numeric(Pair) - 0.45, xmax = as.numeric(Pair) + 0.45,
-        ymin = CI_lower, ymax = CI_upper),
-    fill = "cornsilk3", color = "black", alpha = 0.7, linewidth = 0.2
-  ) +
-  geom_segment(
-    aes(x = as.numeric(Pair) - 0.35, xend = as.numeric(Pair) + 0.35,
-        y = Median, yend = Median),
-    linewidth = 1, color = "black"
-  ) +
-  coord_flip(ylim = c(-0.8, 0.8)) +
-  labs(
-    x = "Variable pairs (sorted by |ρ|, highest on top)",
-    y = "Spearman ρ (bootstrap median)",
-    title = "Spearman correlation CIs with Cohen (1988) effect size thresholds",
-    caption = paste(
-      "Dashed lines: |r| < 0.1 very small, 0.1 ≤ |r| < 0.3 small,",
-      "0.3 ≤ |r| < 0.5 moderate, |r| ≥ 0.5 large (Cohen, 1988)."
-    )
-  ) +
-  theme_bw() +
-  theme(
-    axis.text.y = element_text(size = 8),
-    axis.text.x = element_text(size = 8),
-    plot.margin = margin(l = 80, r = 20, t = 10, b = 40, unit = "pt"),
-    plot.caption = element_text(hjust = 0, size = 8)
-  )
-
-print(p_cor_ci)
-
-# ggsave("correlation_ci_pairs.svg", p_cor_ci, width = 14, height = 12, dpi = 300)
-
+ggsave("trigeminal_correlation_heatmap_clustered_variables.svg", corr_plot_clustered_variables, width = 16, height = 16)
+ggsave("trigeminal_correlation_heatmap_clustered_variables.png", corr_plot_clustered_variables, width = 16, height = 16)
 
 # Uniform margins only
-p_left <- corr_plot_clustered_variables + theme(plot.margin = margin(5, 5, 5, 5))
-p_right <- p_cor_ci + theme(plot.margin = margin(5, 5, 5, 5))
+p_left <- corr_plot_clustered_variables + theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
+p_right <- p_cor_ci + theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
 
 # patchwork horizontal + BIG A B LABELS + original titles preserved
 correlation_matrix_ci_pairs <- (p_left | p_right) +
@@ -2234,7 +1980,7 @@ correlation_matrix_ci_pairs <- (p_left | p_right) +
       plot.tag = element_text(face = "bold", size = 16)
     )
   ) &
-  theme(plot.margin = margin(5, 5, 5, 5))
+  theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
 
 
 print(correlation_matrix_ci_pairs)
@@ -2249,6 +1995,7 @@ ggsave("correlation_matrix_ci_pairs.png", correlation_matrix_ci_pairs,
 # ========================================================================== #
 
 
+
 # Combine all main PCA plots into publication-ready figure
 combined_TriFunQ_PCA_plot <- cowplot::plot_grid(
 # Upper row: Biplot (A)
@@ -2256,39 +2003,46 @@ combined_TriFunQ_PCA_plot <- cowplot::plot_grid(
     pBiplot,
     pScree,
     labels = LETTERS[1:2],
-    ncol = 1, rel_heights = c(2, 1)
+    nrow = 1,
+    rel_widths = c(2,1)
   ),
 # Lower row: PCA plots (B, C and D)
     cowplot::plot_grid(
-      pContrib_dim1,
-      pContrib_dim2,
-      labels = LETTERS[3:4],
+      plotlist = pContrib_dims,
+      labels = LETTERS[3:(3+n_comp)],
       align = "h", axis = "t",
       nrow = 1
     ),
-  ncol = 2,
-  rel_widths = c(1, 1)
+  nrow = 2, rel_heights = c(2,1)
 )
 
 
 # Combine all main PCA plots into publication-ready figure
 
-library(patchwork)
 
 # Column 1: p1 ABOVE p2 (vertical, patchwork style)
-p_column_1 <- (pBiplot + theme(plot.margin = margin(5, 5, 5, 5))) /
-  (pScree + theme(plot.margin = margin(5, 5, 5, 5)))
+p_column_1 <- (
+  pBiplot + theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
+) /
+  (
+    pScree + theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
+  ) +
+  plot_layout(heights = c(2, 1))
 
-# Column 2: p3 BESIDE p4 (horizontal, patchwork style)
-p_column_2 <- (pContrib_dim1 + theme(plot.margin = margin(5, 5, 5, 5))) |
-  (pContrib_dim2 + theme(plot.margin = margin(5, 5, 5, 5)))
+pContrib_dims1 <- lapply(pContrib_dims, function(p) {
+  p + theme(plot.margin = ggplot2::margin(5, 5, 5, 5))
+})
+
+p_column_2 <- wrap_plots(pContrib_dims1, ncol = 2)
+
 
 # Combine columns side-by-side WITH cowplot-style alignment
-combined_TriFunQ_PCA_plot <- cowplot::plot_grid(
-  p_column_1, p_column_2,
-  labels = LETTERS[1:4],        # A,B,C,D labels
-  align = "h", axis = "t",     # EXACT cowplot alignment from template
-  rel_widths = c(1, 1),         # Equal column widths
+combined_TriFunQ_PCA_plot <-
+  cowplot::plot_grid(
+    pBiplot + theme(plot.margin = ggplot2::margin(5, 5, 5, 5)), p_column_2,
+  labels = LETTERS[1:4], # A,B,C,D labels
+  align = "h", axis = "t", # EXACT cowplot alignment from template
+  rel_widths = c(1, 1), # Equal column widths
   ncol = 2
 )
 
@@ -2297,7 +2051,7 @@ combined_TriFunQ_PCA_plot_final <- cowplot::plot_grid(
   ggplot() +
     labs(title = "PCA results") +
     theme_void() +
-    theme(plot.title = element_text(size = 14, face = "plain", hjust = 0, margin = margin(b = 10))),
+    theme(plot.title = element_text(size = 14, face = "plain", hjust = 0, margin = ggplot2::margin(b = 10))),
   combined_TriFunQ_PCA_plot,
   ncol = 1,
   rel_heights = c(0.03, 1),
@@ -2308,8 +2062,8 @@ combined_TriFunQ_PCA_plot_final <- cowplot::plot_grid(
 print(combined_TriFunQ_PCA_plot)
 
 # Save combined figure
-ggsave("combined_TriFunQ_PCA_plot.svg", combined_TriFunQ_PCA_plot, width = 20, height = 16)
-ggsave("combined_TriFunQ_PCA_plot.png", combined_TriFunQ_PCA_plot, width = 20, height = 16, dpi = 300)
+ggsave("combined_TriFunQ_PCA_plot.svg", combined_TriFunQ_PCA_plot, width = 18, height = 18)
+ggsave("combined_TriFunQ_PCA_plot.png", combined_TriFunQ_PCA_plot, width = 18, height = 18, dpi = 300)
 
 
 # ========================================================================== #

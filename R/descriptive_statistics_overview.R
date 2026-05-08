@@ -1,24 +1,23 @@
 ################################################################################
-# Trigeminal Sensitivity Analysis - Bormann Study
+# Trigeminal Sensitivity Analysis
+#
 # Author: Jorn Lotsch
+#
 # Description: Analysis of trigeminal sensitivity study data, including
 #              preprocessing, translation, categorization, descriptive stats,
 #              and tabulations per variable category.
 ################################################################################
 
+# ========================================================================== #
+# 1. LOAD REQUIRED LIBRARIES
+# ========================================================================== #
 
-# ======================== #
-# 1. Load Required Libraries
-# ======================== #
-library(stringr)
-library(dplyr)
-library(readr)
-library(tidyr)
-library(psych)
+# Load global mappings (e.g., category labels, translation dictionaries).
+source("globals.R")
 
-# =============================== #
-# 2. Read data
-# =============================== #
+# ========================================================================== #
+# 2. READ DATA
+# ========================================================================== #
 
 trigeminale_daten_corrected_translated <- read.csv("trigeminale_daten_corrected_translated.csv", check.names = FALSE)
 
@@ -30,12 +29,9 @@ variable_categories <- read.csv("trigeminale_daten_variable_categories.csv")
 # Remove duplicated columns, keeping the first occurrence
 trigeminale_daten_corrected_translated <- trigeminale_daten_corrected_translated[, !duplicated(names(trigeminale_daten_corrected_translated))]
 
-# Load global mappings (e.g., category labels, translation dictionaries).
-source("globals.R")
-
-# =============================== #
-# 3. Descriptive statistics and tabulations per category
-# =============================== #
+# ========================================================================== #
+# 3. DESCRIPTIVE STATISTICS AND TABULATIONS PER CATEGORY
+# ========================================================================== #
 
 # Helper function to classify variable type
 get_var_type <- function(x) {
@@ -123,20 +119,6 @@ summarize_var <- function(x, var_type, var_name = NULL) {
     ))
   }
 
-  # if (var_name_lower %in% special_numeric_vars) {
-  #   x_num_no_na <- as.numeric(x[!is.na(x)])
-  #   mean_x <- mean(x_num_no_na)
-  #   sd_x <- sd(x_num_no_na)
-  #   median_x <- median(x_num_no_na)
-  #   iqr_x <- IQR(x_num_no_na)
-  #   rng <- range(x_num_no_na)
-  #   return(tibble(
-  #     Summary = sprintf("mean=%.2f, sd=%.2f, median=%.2f, iqr=%.2f, range=%s, n=%d",
-  #                       mean_x, sd_x, median_x, iqr_x, paste(rng, collapse = "-"), length(x_num_no_na)),
-  #     var_type = "interval/ordinal"
-  #   ))
-  # }
-
   if (is.numeric(x)) {
     x_no_na_num <- x[!is.na(x)]
     n_valid_num <- length(x_no_na_num)
@@ -168,18 +150,6 @@ summarize_var <- function(x, var_type, var_name = NULL) {
         var_type = "interval/ordinal"
       ))
     }
-
-    # if (var_type == "interval" || (var_type == "ordinal" && n_unique_num > 5)) {
-    #   mean_x <- mean(x_no_na_num)
-    #   sd_x <- sd(x_no_na_num)
-    #   median_x <- median(x_no_na_num)
-    #   iqr_x <- IQR(x_no_na_num)
-    #   return(tibble(
-    #     Summary = sprintf("mean=%.2f, sd=%.2f, median=%.2f, iqr=%.2f, range=%s, n=%d",
-    #                       mean_x, sd_x, median_x, iqr_x, paste(rng, collapse = "-"), n_valid_num),
-    #     var_type = "interval/ordinal"
-    #   ))
-    # }
 
     if (var_type == "ordinal" && n_unique_num <= 5) {
       counts <- as.data.frame(table(x_no_na_num), stringsAsFactors = FALSE)
@@ -429,12 +399,10 @@ head(desc_stats, n = 20)
 # Output as CSV
 write_csv(desc_stats, "descriptive_statistics_by_category.csv")
 
-
-
-
 # ========================================================================== #
-# B. Statistics from analysis data set; to be performed only AFTER running  "build_analysis_dataset.R"
+# 4. STATISTICS FROM ANALYSIS DATASET
 # ========================================================================== #
+# NOTE: To be performed only AFTER running "build_analysis_dataset.R"
 
 
 completed_and_assembled_analysis_dataset <- read.csv("analysis_dataset.csv", check.names = FALSE)
@@ -501,9 +469,13 @@ desc_table$Sum <- col_sums_vec
 # Print updated table
 print(desc_table)
 
-# =============================== #
-# 7. Save statistics
-# =============================== #
+# ========================================================================== #
+# 5. SAVE STATISTICS
+# ========================================================================== #
 
 write.csv(desc_table, "descriptive_statistics_analysis_dataset_not_imputed.csv", row.names = TRUE)
+
+# ========================================================================== #
+# END OF SCRIPT
+# ========================================================================== #
 

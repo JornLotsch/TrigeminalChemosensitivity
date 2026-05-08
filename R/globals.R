@@ -1,78 +1,150 @@
 ################################################################################
-# Trigeminal Sensitivity Analysis - Bormann Study
+# GLOBALS.R - Global Configuration for Trigeminal Sensitivity Analysis
+################################################################################
 # Author: Jorn Lotsch
-# Description: Analysis of trigeminal sensitivity study data, including
-#              preprocessing, translation, categorization, descriptive stats,
-#              and tabulations per variable category.
+# Study: Trigeminal Sensitivity Analysis
+#
+# Description:
+#   This file defines global constants, configurations, and data mappings
+#   used throughout the analysis pipeline.
+#
+# Contents:
+#   - Utility function loader (source utils.R)
+#   - Required library declarations
+#   - Color palettes for visualization
+#   - Category label mappings
+#   - Variable name translations (German to English)
+#   - Variable categorizations by domain
+#   - ENT surgery/therapy terminology dictionary
+#
+# Note: All reusable utility functions have been moved to utils.R
+#       See utils.R for transformation, statistical, and plotting functions.
 ################################################################################
 
+# ========================================================================== #
+# LOAD UTILITY FUNCTIONS
+# ========================================================================== #
+
+# Load all utility functions from utils.R
+source("utils.R")
+
+# ========================================================================== #
+# LOAD REQUIRED LIBRARIES
+# ========================================================================== #
+
+
+# Core data manipulation
+library(dplyr)          # Data manipulation
+library(purrr)          # Functional programming
+library(readr)          # Data manipulation
+library(reshape2)       # Data reshaping (legacy; consider tidyr instead)
+library(tibble)         # Modern data frames
+library(tidyr)          # Data tidying
+library(broom)          # Data manipulation
+
+# Visualization
+library(circlize)       # Color mapping for heatmaps
+library(colorspace)     # Color manipulation
+library(ComplexHeatmap) # Advanced heatmaps
+library(cowplot)        # Plot composition
+library(ggplot2)        # Core plotting
+library(ggplotify)      # Convert base plots to ggplot
+library(ggpmisc)        # Additional ggplot2 functionality
+library(ggpubr)         # Publication-ready plots
+library(ggrepel)        # Text placement
+library(ggthemes)       # Extra themes
+library(grid)           # Grid graphics
+library(gridExtra)      # Multiple grid plots
+library(nVennR)         # Venn diagrams
+library(patchwork)      # Plot composition
+library(scales)         # Scale functions
+library(viridis)        # Color scales
+
+# Statistical analysis
+library(boot)           # Bootstrap methods
+library(effsize)        # Effect size calculations
+library(Hmisc)          # Statistical tools
+library(MASS)           # Robust statistics
+library(nortest)        # Distribution tests
+library(psych)          # Descriptive and correction analysis
+library(twosamples)     # Distribution tests
+
+# Clustering and dimensionality reduction
+library(cluster)        # Clustering algorithms
+library(factoextra)     # Factor visualization
+library(FactoMineR)     # Factor analysis
+library(NbClust)        # Optimal cluster number
+
+# Specialized analyses
+library(cvms)               # Confusion matrix visualization
+library(DataVisualizations) # Pareto Density Estimation
+library(missForest)         # Imputation methods
+library(missRanger)         # Imputation methods
+library(opGMMassessment)    # Gaussian Mixture Models
+library(vcd)                # Categorical data visualization
+library(cABCanalysis)        # ABC item categorization
+
+# Utilities
+library(forcats)        # Factor handling
+library(lubridate)      # Date/time handling
+library(pbmcapply)      # Parallel apply functions
+library(stringr)        # String manipulation
+
+# Data fitting
+library(glmnet)         # Fitting
+library(Boruta)         # RF feature seletcion
+library(randomForest)   # RF
+library(caret)          # ML functions
+
+
+
 # ======================== #
-# Functions
+# Colors
 # ======================== #
 
-#' Custom publication-quality ggplot2 theme
-#'
-#' @return ggplot2 theme object
-theme_plot <- function() {
-  theme_minimal(base_family = "Libre Franklin") +
-    theme(
-      plot.title = element_text(
-        face = "plain", size = 12, color = "#222222",
-        hjust = 0, margin = margin(b = 10)
-      ),
-      axis.title = element_text(face = "plain", size = 10, color = "#444444"),
-      axis.text = element_text(face = "plain", size = 10, color = "#444444"),
-      plot.caption = element_text(
-        size = 8, color = "#888888",
-        hjust = 0, margin = margin(t = 10)
-      ),
-      panel.grid.major.y = element_line(
-        color = "#dddddd", linetype = "dashed", size = 0.3
-      ),
-      panel.grid.major.x = element_blank(),
-      panel.grid.minor = element_blank(),
-      axis.line = element_line(color = "#bbbbbb", size = 0.5),
-      axis.ticks = element_line(color = "#bbbbbb", size = 0.5),
-      axis.ticks.length = unit(5, "pt"),
-      plot.background = element_rect(fill = "white", color = NA),
-      panel.background = element_rect(fill = "white", color = NA),
-      legend.position = "right",
-      legend.direction = "vertical",
-      plot.margin = margin(20, 20, 20, 20),
-      strip.background = element_blank(),
-      strip.text = element_text(face = "bold", size = 12, color = "#222222")
-    )
-}
+# Extended colorblind palette
+cb_palette <- c(
+  "#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00",
+  "#CC79A7", "#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2",
+  "#D55E00", "#CC79A7"
+)
 
-#' Scale vector to specified range
-#'
-#' @param x Numeric vector to scale
-#' @param minX Desired minimum value
-#' @param maxX Desired maximum value
-#' @return Scaled vector in range [minX, maxX]
-scaleRange_01 <- function(x) {
-  (x - min(x)) / (max(x) - min(x))
-}
+# Extended colorblind palette with IoT as cornsilk shades
+cornsilk1_palette <- c(
+  "cornsilk1", "cornsilk2", "cornsilk3", "cornsilk4", "grey85",
+  "lightgoldenrod1", "lightgoldenrod2", "lightgoldenrod3", "lightgoldenrod4",
+  "gold1", "gold2", "gold3", "gold4",
+  "lemonchiffon1", "lemonchiffon2", "lemonchiffon3", "lemonchiffon4"
+)
 
-#' Min-max normalization to [0,1] with fixed boundaries
-#'
-#' @param x Numeric vector to normalize
-#' @param minX Fixed minimum boundary
-#' @param maxX Fixed maximum boundary
-#' @return Normalized vector
-scale01minmax <- function(x, minX, maxX) {
-  (x - minX) / (maxX - minX)
-}
+cornsilk2_palette <- c(
+  "cornsilk1", "cornsilk2", "cornsilk3", "cornsilk4", "grey85",
+  "gold1", "gold2", "gold3", "gold4",
+  "khaki1", "khaki2", "khaki3", "khaki4",
+  "#DDD6B2", "#D2CC9F", "#C8C28C", "#BEB879"
+)
 
 
-#' Scale data to percentage range [0, 100]
-#'
-#' @param data Numeric vector or matrix to scale.
-#' @return Scaled data where each column has minimum 0 and maximum 100.
-#' @details Uses \code{toRange} internally.
-to_percent <- function(data) {
-  toRange(data, 0, 100)
-}
+actual_palette <- cornsilk2_palette
+
+# ============================================================================ #
+# NOTE: All utility functions have been moved to utils.R
+# ============================================================================ #
+# Functions previously defined here are now in utils.R and loaded via
+# source("utils.R") at the beginning of this file.
+#
+# Sections in utils.R:
+#   § 1. Data Manipulation Helpers (7 functions)
+#   § 2. Statistical Transformations (9 functions)
+#   § 5. Statistical Effect Size Functions (6 functions)
+#   § 6. Plotting Helpers (3 functions)
+#
+# This file now contains only:
+#   - Color palettes
+#   - Category labels
+#   - Translation dictionaries
+#   - Variable categorizations
+# ============================================================================ #
 
 
 # ======================== #

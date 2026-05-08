@@ -358,7 +358,7 @@ p_Covid <- ggplot(
   geom_point() +
   geom_line() +
   scale_color_gradient(
-    high = "cornsilk3",
+    high = actual_palette[3],
     low = "ivory4",
     na.value = "grey80"
   ) +

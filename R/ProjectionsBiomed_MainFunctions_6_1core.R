@@ -16,8 +16,8 @@ safe_extract_cluster_data <- function(cluster_list) {
 
 # Helper function for row medians
 rowMedians <- function(x, na.rm = TRUE) {
-  if (!is.data.frame(x) | !is.matrix(x)) {
-    x
+  if (!is.data.frame(x) && !is.matrix(x)) {
+    return(x)
   }
   apply(x, 1, median, na.rm = na.rm)
 }
@@ -32,7 +32,7 @@ REQUIRED_PACKAGES <- c(
   "fastICA", "MASS", "Rtsne", "RDRToolbox", "mixOmics",
   "umap", "uwot", "caret", "pracma", "combinat", "NbClust", "parallel",
   "dplyr", "ape", "combinat", "NMF", "RANN", "pls", "Matrix",
-  "twosamples", "car", "stringr", "EDOtrans"
+  "twosamples", "car", "stringr", "EDOtrans", "future.apply"
 )
 
 ############### Main function ###############
@@ -48,7 +48,7 @@ load_required_packages <- function(packages) {
 perform_analysis <- function(datasets,
                              projection_methods = "PCA",
                              clustering_methods = "none",
-                             cluster_number_methods = "orig",
+                             cluster_number_methods = "NbClust",
                              selected_cluster_metrics = c("cluster_accuracy", "Silhouette_index", "Dunn_index",
                                                           "Rand_index", "DaviesBouldin_index", "dbcv_index",
                                                           "CalinskiHarabasz_index", "inertia", "adjusted_mutual_information"),
@@ -64,6 +64,7 @@ perform_analysis <- function(datasets,
                              seed = 42,
                              jitter_one_dimensional_projections = TRUE,
                              nProc = 12,
+                             n_clusters = 2,
                              max_clusters = 5,
                              scaleX = TRUE,
                              doEDOtrans = FALSE,
@@ -182,6 +183,7 @@ perform_analysis <- function(datasets,
         distance_metric = distance_metric,
         seed = seed,
         nProc = min(nProc, length(local_projection_methods)),
+        n_clusters = n_clusters,
         max_clusters = max_clusters
       )
       all_clustering_results[[dataset_name]] <- clustering_results
@@ -425,7 +427,7 @@ validate_and_filter_parameters <- function(projection_methods,
                                 "diana", "hcpc", "ward.D2", "single", "average", "median", "complete", "centroid")
   valid_hcpc_methods <- c("average", "single", "complete", "ward", "weighted", "flexible", "gaverage")
   valid_distances <- c("euclidean", "maximum", "manhattan", "canberra", "binary", "minkowski")
-  valid_cluster_number_methods <- c("orig", "NbClust", "hcpc")
+  valid_cluster_number_methods <- c("orig", "NbClust", "hcpc", "none")
   valid_cluster_metrics <- c("cluster_accuracy", "Silhouette_index", "Dunn_index", "Rand_index", "DaviesBouldin_index", "dbcv_index",
                              "CalinskiHarabasz_index", "inertia", "adjusted_mutual_information")
 
@@ -511,26 +513,27 @@ validate_and_filter_parameters <- function(projection_methods,
 # Function to generate projections
 
 generate_projections <- function(data,
-                                  projection_methods,
-                                  seed,
-                                  jitter_one_dimensional_projections,
-                                  nProc,
-                                  scaleX,
-                                  remove_colinear_vars,
-                                  correlation_threshold_for_colinearity,
-                                  vif_threshold_for_colinearity) {
+                                 projection_methods,
+                                 seed,
+                                 jitter_one_dimensional_projections,
+                                 nProc,
+                                 scaleX,
+                                 doEDOtrans,
+                                 remove_colinear_vars,
+                                 correlation_threshold_for_colinearity,
+                                 vif_threshold_for_colinearity) {
   data_clean <- data[, !(names(data) %in% c("Target", "Label"))]
   target <- data$Target
   labels <- data$Label
 
-  projections <- lapply(projection_methods, function(projection_method) {
+  projections <- pbmcapply::pbmclapply(projection_methods, function(projection_method) {
     message("Applying projection: ", projection_method)
     tryCatch({
       projection <- performProjection(X = data_clean, projection_method = projection_method, Target = target, labels = labels, seed = seed,
-                                       jitter_one_dimensional_projections = jitter_one_dimensional_projections, scaleX = scaleX,
-                                       remove_colinear_vars = remove_colinear_vars,
-                                       correlation_threshold_for_colinearity = correlation_threshold_for_colinearity,
-                                       vif_threshold_for_colinearity = vif_threshold_for_colinearity)
+                                      jitter_one_dimensional_projections = jitter_one_dimensional_projections, scaleX = scaleX, doEDOtrans = doEDOtrans,
+                                      remove_colinear_vars = remove_colinear_vars,
+                                      correlation_threshold_for_colinearity = correlation_threshold_for_colinearity,
+                                      vif_threshold_for_colinearity = vif_threshold_for_colinearity)
       if (!is.list(projection) || !"Projected" %in% names(projection))
         stop("Invalid projection result.")
       return(projection)
@@ -538,7 +541,7 @@ generate_projections <- function(data,
       message("Error with method ", projection_method, ": ", err$message)
       return(NULL)
     })
-  }) #, mc.cores = min( length( projection_methods ), nProc ) )
+  }, mc.cores = min(length(projection_methods), nProc))
 
   names(projections) <- projection_methods
   return(projections)
@@ -1116,40 +1119,58 @@ performProjection <- function(X,
 # Apply clustering algorithms
 apply_clustering <- function(projection_results, clustering_methods, cluster_number_methods, method_for_hcpc,
                              distance_metric = "euclidean", seed = 42, nProc = 12,
-                             max_clusters = max_clusters) {
+                             n_clusters = n_clusters, max_clusters = max_clusters) {
 
-  cluster_list <- pbmcapply::pbmclapply(names(projection_results), function(projection) {
+
+  cluster_list <- lapply(names(projection_results), function(projection) {
     projection_result <- projection_results[[projection]]
+
     tryCatch({
       if (is.null(projection_result$UniqueData$Target)) {
         stop("Required data is missing for clustering.")
       }
+
       projected_data <- as.data.frame(projection_result$Projected)
-      clusters_per_projection <- lapply(clustering_methods, function(cluster_alg) {
-        clusters_results <- lapply(cluster_number_methods, function(cluster_number_method) {
+
+      # plan(multicore, workers = min(length(clustering_methods), nProc))
+
+      clusters_per_projection <- lapply(clustering_methods, function(cluster_alg, parallel = FALSE) {
+        clusters_results <- lapply(cluster_number_methods, function(cluster_number_method, parallel = FALSE) {
           set.seed(seed)
-          clusters <- performClustering(X = projected_data,
-                                        Target = projection_result$UniqueData$Target,
-                                        clustering_method = cluster_alg,
-                                        cluster_number_method = cluster_number_method,
-                                        method_for_hcpc = method_for_hcpc,
-                                        distance_metric = distance_metric,
-                                        max_clusters = max_clusters)
-          if (cluster_alg != "none") clusters <- renameClusters(trueCls = projection_result$UniqueData$Target, clusters)
-          combined_result <- create_combined_result(projected_data, clusters, projection_result)
-          return(combined_result)
+
+          clusters <- performClustering(
+            X = projected_data,
+            Target = projection_result$UniqueData$Target,
+            clustering_method = cluster_alg,
+            cluster_number_method = cluster_number_method,
+            method_for_hcpc = method_for_hcpc,
+            distance_metric = distance_metric,
+            n_clusters = n_clusters,
+            max_clusters = max_clusters
+          )
+
+          if (cluster_alg != "none") {
+            clusters <- renameClusters(
+              trueCls = projection_result$UniqueData$Target,
+              clusters
+            )
+          }
+
+          create_combined_result(projected_data, clusters, projection_result)
         })
+
         names(clusters_results) <- cluster_number_methods
-        return(clusters_results)
+        clusters_results
       })
+
       names(clusters_per_projection) <- clustering_methods
-      return(clusters_per_projection)
+      clusters_per_projection
 
     }, error = function(err) {
       message("Error in clustering with projection ", projection, ": ", err$message)
-      return(NULL)
+      NULL
     })
-  }, mc.cores = min(length(projection_results), nProc))
+  }) # , mc.cores = min(length(projection_methods), nProc))
 
   names(cluster_list) <- names(projection_results)
   return(cluster_list)
@@ -1158,7 +1179,7 @@ apply_clustering <- function(projection_results, clustering_methods, cluster_num
 
 # Function to determine the number of clusters
 findOptimalClusters <- function(X, clustering_method, cluster_number_method, Target = NULL,
-                                method_for_hcpc = "ward", distance_metric = "euclidean", max_clusters = max_clusters) {
+                                method_for_hcpc = "ward", distance_metric = "euclidean", n_clusters = n_clusters, max_clusters = max_clusters) {
 
   # Load necessary libraries
   if (!requireNamespace("NbClust", quietly = TRUE)) {
@@ -1197,7 +1218,7 @@ findOptimalClusters <- function(X, clustering_method, cluster_number_method, Tar
     if (!inherits(res, "try-error")) {
       max(unlist(res[4]))
     } else {
-      # Try running NbClust using parallel processing
+      # Try running NbClust index after index
       nbclustIndices <- c("kl", "ch", "hartigan", "ccc", "scott", "marriot", "trcovw", "tracew",
                                               "friedman", "rubin", "cindex", "db", "silhouette", "duda", "pseudot2",
                                               "beale", "ratkowsky", "ball", "ptbiserial", "gap", "frey", "mcclain",
@@ -1224,8 +1245,9 @@ findOptimalClusters <- function(X, clustering_method, cluster_number_method, Tar
                       "hcpc" = {
     res.hcpc <- FactoMineR::HCPC(X, consol = TRUE, method = method_for_hcpc, metric = distance_metric, nb.clust = -1,
                                                      iter.max = 100, graph = FALSE, nstart = 100)
-    length(unique(res.hcpc$data.clust$clust))
+    ifelse(length(unique(res.hcpc$data.clust$clust)) > max_clusters, max_clusters, length(unique(res.hcpc$data.clust$clust)))
   },
+                      "none" = n_clusters,
   # Default case if Target is provided or none matches
                       if (!is.null(Target)) {
                         length(unique(Target))
@@ -1246,10 +1268,9 @@ findOptimalClusters <- function(X, clustering_method, cluster_number_method, Tar
   return(nClusters)
 }
 
-
 # Function to perform clustering
 performClustering <- function(X, Target = NULL, clustering_method = "kmeans", cluster_number_method = "orig", method_for_hcpc = "ward",
-                              distance_metric = "euclidean", max_clusters = max_clusters) {
+                              distance_metric = "euclidean", n_clusters = n_clusters, max_clusters = max_clusters) {
 
   # Check if input X is a non-empty data frame
   if (!is.data.frame(X) || nrow(X) == 0) stop("Input data must be a non-empty data frame.")
@@ -1259,7 +1280,7 @@ performClustering <- function(X, Target = NULL, clustering_method = "kmeans", cl
                                 "diana", "hcpc", "ward.D2", "single", "average", "median", "complete", "centroid")
   valid_hcpc_methods <- c("average", "single", "complete", "ward", "weighted", "flexible", "gaverage")
   valid_distances <- c("euclidean", "maximum", "manhattan", "canberra", "binary", "minkowski")
-  valid_cluster_number_methods <- c("orig", "NbClust", "hcpc")
+  valid_cluster_number_methods <- c("orig", "NbClust", "hcpc", "none")
 
   # Validate the selected method
   if (!(clustering_method %in% valid_clustering_methods))
@@ -1271,6 +1292,7 @@ performClustering <- function(X, Target = NULL, clustering_method = "kmeans", cl
   if (!(cluster_number_method %in% valid_cluster_number_methods))
     stop(paste("Invalid method for cluster number determination. Choose from:", paste(valid_cluster_number_methods, collapse = ", ")))
 
+
   # If Target is NULL, initialize it with default values
   if (is.null(Target)) Target <- rep(1, nrow(X))
 
@@ -1279,8 +1301,12 @@ performClustering <- function(X, Target = NULL, clustering_method = "kmeans", cl
   if (clustering_method == "none") {
     nClusters <- length(unique(Target))
   } else {
-    nClusters <- findOptimalClusters(X, clustering_method = clustering_method,
-                                     cluster_number_method = cluster_number_method, Target = Target, max_clusters = max_clusters)
+    if (cluster_number_method != "none") {
+      nClusters <- findOptimalClusters(X, clustering_method = clustering_method,
+                                       cluster_number_method = cluster_number_method, Target = Target, n_clusters = n_clusters, max_clusters = max_clusters)
+    } else {
+      nClusters <- n_clusters
+    }
   }
 
   # Perform clustering based on the specified method
@@ -1288,7 +1314,7 @@ performClustering <- function(X, Target = NULL, clustering_method = "kmeans", cl
                            "none" = Target, # Return Target directly if method is "none"
                            "kmeans" = {
     # Perform K-means clustering
-    kmeans(X, centers = nClusters, nstart = 100,)$cluster
+    kmeans(X, centers = nClusters, nstart = 100)$cluster
   },
                            "kmedoids" = {
     # Perform K-medoids clustering using PAM
@@ -1680,22 +1706,35 @@ calculate_cluster_scores_df <- function(clustering_results, projection_methods, 
 
         combined_result <- clustering_results[[projection_method]][[cluster_alg]][[cluster_number_method]]
 
-        projected_data <- combined_result[, 1:2]
+        projected_data <- combined_result[, !names(combined_result) %in% c("Cluster", "Target", "Label", "Misclassified")]
         Target <- combined_result$Target
         Clusters <- combined_result$Cluster
 
 
         distance_matrix <- stats::dist(projected_data, method = distance_metric)
 
-        cluster_accuracy <- sum(Clusters == Target) / length(Clusters)
-        Silhouette_index <- mean(cluster::silhouette(Clusters, distance_matrix)[, "sil_width"])
-        Dunn_index <- calculate_dunn_index(distance_matrix = distance_matrix, clusters = Clusters)
-        Rand_index <- calculate_adjusted_rand_index(Clusters, Target)
-        DaviesBouldin_index <- calculate_davies_bouldin_index(clusters = Clusters, data = projected_data)
-        dbcv_index <- calculate_dbcv(data = projected_data, clusters = Clusters, dist_method = distance_metric)
-        CalinskiHarabasz_index <- calculate_calinski_harabasz_index(projected_data, Clusters)
-        inertia_value <- calculate_inertia(projected_data, Clusters)
-        ami_value <- calculate_ami(Target, Clusters)
+        if (length(unique(Clusters)) > 1) {
+          cluster_accuracy <- sum(Clusters == Target) / length(Clusters)
+          Silhouette_index <- mean(cluster::silhouette(Clusters, distance_matrix)[, "sil_width"])
+          Dunn_index <- calculate_dunn_index(distance_matrix = distance_matrix, clusters = Clusters)
+          Rand_index <- calculate_adjusted_rand_index(Clusters, Target)
+          DaviesBouldin_index <- calculate_davies_bouldin_index(clusters = Clusters, data = projected_data)
+          dbcv_index <- calculate_dbcv(data = projected_data, clusters = Clusters, dist_method = distance_metric)
+          CalinskiHarabasz_index <- calculate_calinski_harabasz_index(projected_data, Clusters)
+          inertia_value <- calculate_inertia(projected_data, Clusters)
+          ami_value <- calculate_ami(Target, Clusters)
+        } else {
+          cluster_accuracy <- sum(Clusters == Target) / length(Clusters)
+          Silhouette_index <- 0
+          Dunn_index <- calculate_dunn_index(distance_matrix = distance_matrix, clusters = Clusters)
+          Rand_index <- 0
+          DaviesBouldin_index <- calculate_davies_bouldin_index(clusters = Clusters, data = projected_data)
+          dbcv_index <- calculate_dbcv(data = projected_data, clusters = Clusters, dist_method = distance_metric)
+          CalinskiHarabasz_index <- 0
+          inertia_value <- calculate_inertia(projected_data, Clusters)
+          ami_value <- calculate_ami(Target, Clusters)
+
+        }
 
 
         return(data.frame(
@@ -2505,11 +2544,22 @@ combine_all_plots <- function(datasets, projection_plots, projection_methods, cl
     stop("No valid combinations found in input lists.")
   }
 
-  all_plots <- unlist(lapply(projection_plots, function(projection) {
-    if (!is.null(projection)) {
-      return(unlist(projection, recursive = FALSE, use.names = FALSE))
+  # Extract plots in the correct nested order: projection_method -> clustering_method -> cluster_number_method
+  all_plots <- list()
+
+  # projection_plots is a list of (projection.clustering) elements,
+  # each containing cluster_number_method elements
+  for (i in seq_along(projection_plots)) {
+    proj_clust_combo <- projection_plots[[i]]
+    if (!is.null(proj_clust_combo) && is.list(proj_clust_combo)) {
+      # Extract only the specified cluster_number_methods in order
+      for (cn_method in cluster_number_methods) {
+        if (cn_method %in% names(proj_clust_combo) && !is.null(proj_clust_combo[[cn_method]])) {
+          all_plots <- c(all_plots, list(proj_clust_combo[[cn_method]]))
+        }
+      }
     }
-  }), recursive = FALSE, use.names = FALSE)
+  }
 
   if (length(all_plots) == 0) {
     stop("No plots available to combine.")
@@ -2655,19 +2705,20 @@ update_plot_titles <- function(projection_plots, title_size = 7, wrap_chars = 25
           # Get current title and wrap it
           current_title <- single_plot$labels$title
           if (!is.null(current_title)) {
-            wrapped_title <- str_wrap(current_title, width = wrap_chars)
-            single_plot <- single_plot + labs(title = wrapped_title)
+            wrapped_title <- stringr::str_wrap(current_title, width = wrap_chars)
+            single_plot <- single_plot + ggplot2::labs(title = wrapped_title)
           }
-          single_plot + theme(
-            plot.title = element_text(
+          single_plot <- single_plot + ggplot2::theme(
+            plot.title = ggplot2::element_text(
               size = title_size,
               face = "plain",
               lineheight = 0.8, # Controls spacing between wrapped lines
-              margin = margin(b = 4)
+              margin = ggplot2::margin(b = 4)
             )
           )
+          return(single_plot)
         } else {
-          single_plot
+          return(single_plot)
         }
       })
     })

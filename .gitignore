@@ -30,4 +30,7 @@ OLDstuff/
 *.bak
 *.swp
 *.sh
-
+Test*
+Hopkins_tests.R
+*OLD*
+.positai
