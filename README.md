@@ -92,10 +92,7 @@ See manuscript Methods for full details.
 │   ├── covid_overview.R                              [COVID-19 effects]
 │   └── nasal_breathing_and_ENT_surgery_overview.R    [Nasal/ENT factors]
 │
-├── Data Files
-│   └─ [Not version-controlled: raw and processed datasets stored locally]
-│
-└── TrigeminalSensitivity.Rproj
+└── Data Files [Not version-controlled: raw and processed datasets stored locally]
 
 📂 Python/
 ├── trigeminal_measures_PCA.py                    [Principal Component Analysis of trigeminal variables]
