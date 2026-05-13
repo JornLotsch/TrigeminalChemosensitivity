@@ -200,7 +200,7 @@ cat("\\nGenerating confusion matrix analysis...\\n")
 # ------------------------------------------------------------------------------
 # Generate confusion matrix plots for selected categorical variables
 # ------------------------------------------------------------------------------
-cv_plots <- lapply(c("Gender_m", "turbinate surgery"), function(actual_feature) {
+cv_plots <- lapply(c("Gender_m", "turbinate.surgery"), function(actual_feature) {
 
   # Prepare dataset with feature and cluster labels
   df_cm_cvms_clus <- data.frame(
@@ -275,11 +275,11 @@ names(cv_plots) <- c("Gender_m", "turbinate surgery")
 # ------------------------------------------------------------------------------
 # Analysis of continuous (gradual) variables across clusters
 # ------------------------------------------------------------------------------
-Boruta_gradual_features <- c(
+Boruta_gradual_features <- make.names(c(
   "Current smell ability",
   "Sensitivity of the nose to stinging/burning stimuli",
   "Smell ability before COVID-19"
-)
+))
 
 gradual_var_exploration <- lapply(Boruta_gradual_features, function(actual_feature) {
 

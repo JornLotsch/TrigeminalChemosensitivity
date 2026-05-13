@@ -95,6 +95,25 @@ original_colors <- c(actual_palette[1], actual_palette[2], actual_palette[3], ac
 dark_colors <- darken(original_colors, amount = 0.3)
 
 # ============================================================================ #
+# PART 2: MACHINE LEARNING FRAMEWORK
+# ============================================================================ #
+# Training set ONLY (n=800 × 21 matrix)
+# All model development: dimensionality reduction, clustering, feature selection,
+#   hyperparameter tuning, and model fitting confined to training set
+# Validation: Performed exclusively on independent held-out set (n=201)
+# Critical design feature: Train/validation split executed BEFORE imputation
+#   (prevents information leakage from held-out participants)
+# 
+# Clustering: 48 combinations of 6 projections × 8 algorithms
+#   Projections: EDOtrans, PCA, ICA, MDS, t-SNE, UMAP
+#   Clustering: k-means, PAM, hierarchical (6 linkages)
+#   Optimal clusters: NbClust (30 validity indices, majority vote)
+#   Quality metric: Calinski-Harabasz index; null model comparison
+# 
+# See README.md "PART 2" section and manuscript Methods for full details
+# ============================================================================ #
+
+# ============================================================================ #
 # 3. HELPER FUNCTIONS
 # ============================================================================ #
 
@@ -150,6 +169,11 @@ trigeminale_all_data_raw <- read.csv("trigeminale_daten_corrected_translated.csv
 # ============================================================================ #
 # 5. DATA TRANSFORMATION AND PREPROCESSING
 # ============================================================================ #
+# Transformations applied to address distribution violations and standardize
+# sensitivity interpretation across the three psychophysical measures.
+# All transformed measures rescaled to [0,3] for interpretability.
+# See README.md "Data Processing" > "Distribution Assessment & Transformations"
+# ============================================================================ #
 
 cat("\n=== Transforming Variables ===\n")
 
@@ -157,15 +181,20 @@ cat("\n=== Transforming Variables ===\n")
 original_names <- names(variables_for_clustering_imputed)
 
 # Transform psychophysical variables (training)
-# AmmoLa intensity: reflected slog (handles ceiling effects)
+# AmmoLa intensity: Reflected sign-preserving log transformation (Norris 2004)
+#   - Handles left-skew and ceiling effects (max=90)
+#   - Formula: -sign(max+1-x) * log10(|max+1-x|+1)
 variables_for_clustering_imputed$`AmmoLa intensity` <-
   scaleRange_01(reflect_slog_unflipped(variables_for_clustering_imputed$`AmmoLa intensity`)) * 3
 
-# CO2 threshold: negative slog (lower = more sensitive)
+# CO2 threshold: Sign-inverted log transformation (sign-flip critical)
+#   - Handles right-skew; inversion makes higher values = higher sensitivity
+#   - Formula: -sign(threshold) * log10(|threshold|+1)
 variables_for_clustering_imputed$`CO2 threshold` <-
   scaleRange_01(-slog(variables_for_clustering_imputed$`CO2 threshold`)) * 3
 
-# Lateralization: none
+# Lateralization: Approximately normal (D'Agostino K² p > 0.05)
+#   - No transformation applied; rescaled to [0,3] for consistency
 variables_for_clustering_imputed$`Lateralization (x/20)` <-
   scaleRange_01(variables_for_clustering_imputed$`Lateralization (x/20)`) * 3
 

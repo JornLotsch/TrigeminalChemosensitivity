@@ -46,6 +46,26 @@
 ################################################################################
 
 # ============================================================================ #
+# PART 2: MACHINE LEARNING FRAMEWORK — Modulator Identification
+# ============================================================================ #
+# Regression analyses linking 220 non-trigeminal candidate modulators
+# (demographics, medical, lifestyle, olfactory) to three psychophysical outcomes.
+# 
+# Model Development: Training set only (n=800)
+# Validation: Independent held-out set (n=201)
+# 
+# Feature Selection: Boruta algorithm (RF-based importance)
+# Regression Methods: OLS, Ridge, Lasso, Elastic Net (α=0.5), Random Forest
+# Hyperparameter Tuning: 5-fold cross-validation for λ; grid search for RF
+# 
+# Post-hoc Characterization: Confirmed modulators assessed with Wilcoxon/Spearman
+# Cross-dataset Validation: Effect size concordance via Kendall's τ
+# 
+# See README.md "PART 2" > "Prediction of psychophysical measures from candidate modulators"
+# and manuscript Methods for full technical details
+# ============================================================================ #
+
+# ============================================================================ #
 # 1. LOAD REQUIRED LIBRARIES
 # ============================================================================ #
 
@@ -68,141 +88,6 @@ dark_colors <- darken(original_colors, amount = 0.3)
 # ============================================================================ #
 # 3. HELPER FUNCTIONS
 # ============================================================================ #
-
-run_penalized_regression_all <- function(train_data,
-                                         train_target,
-                                         alpha_elastic = 0.5,
-                                         nfolds = 5,
-                                         seed = 42,
-                                         ridge_threshold = 0.05) {
-
-  cat(sprintf("Penalized Linear Regression (ridge, lasso, elastic net) ===\n"))
-  cat(sprintf("Dataset: %d features, %d samples\n",
-              ncol(train_data), nrow(train_data)))
-
-  if (ncol(train_data) == 0 || nrow(train_data) == 0) {
-    cat("No data available - skipping\n")
-    return(NULL)
-  }
-
-  ## ---------- 1. Prepare outcome and design matrix ----------
-  y <- as.numeric(train_target)
-
-  # model.matrix will create dummy variables if needed
-  X <- model.matrix(~ ., data = train_data)[, -1, drop = FALSE]  # drop intercept column
-
-  ## ---------- 2. Standard linear regression (for p values) ----------
-  lr_train_data <- train_data
-  lr_train_data$target <- y
-
-  if (ncol(train_data) == 1) {
-    formula_str <- paste("target ~", names(train_data)[1])
-  } else {
-    formula_str <- "target ~ ."
-  }
-
-  glm_fit <- glm(as.formula(formula_str), data = lr_train_data)
-
-  # Get coefficient table, including p values, as a data frame
-  glm_coef_df <- broom::tidy(glm_fit) %>%
-    dplyr::filter(term != "(Intercept)") %>%        # drop intercept
-    dplyr::select(variable = term,
-                  glm_estimate = estimate,
-                  glm_p = p.value)
-
-  ## ---------- 3. Fit penalized models ----------
-  set.seed(seed)
-
-  # Helper to fit cv.glmnet and extract coefficients at lambda.min
-  fit_penalized <- function(alpha_value) {
-    cv_fit <- cv.glmnet(
-      x = X,
-      y = y,
-      family = "gaussian",
-      alpha = alpha_value,
-      nfolds = nfolds
-    )
-
-    best_lambda <- cv_fit$lambda.min
-
-    final_model <- glmnet(
-      x = X,
-      y = y,
-      family = "gaussian",
-      alpha = alpha_value,
-      lambda = best_lambda
-    )
-
-    list(cv_fit = cv_fit,
-         model = final_model,
-         lambda = best_lambda)
-  }
-
-  ridge_res   <- fit_penalized(alpha_value = 0)
-  lasso_res   <- fit_penalized(alpha_value = 1)
-  elastic_res <- fit_penalized(alpha_value = alpha_elastic)
-
-  cat(sprintf("ridge  lambda.min = %g\n", ridge_res$lambda))
-  cat(sprintf("lasso  lambda.min = %g\n", lasso_res$lambda))
-  cat(sprintf("elastic lambda.min = %g (alpha = %.2f)\n",
-              elastic_res$lambda, alpha_elastic))
-
-  ## ---------- 4. Extract coefficient vectors ----------
-  get_coef_df <- function(res, label) {
-    cf <- as.matrix(coef(res$model))   # includes intercept
-    tibble(
-      variable = rownames(cf),
-      coef = as.numeric(cf)
-    ) %>%
-      filter(variable != "(Intercept)") %>%
-      rename_with(~ paste0(label, "_coef"), .cols = coef)
-  }
-
-  ridge_coef_df   <- get_coef_df(ridge_res,   "ridge")
-  lasso_coef_df   <- get_coef_df(lasso_res,   "lasso")
-  elastic_coef_df <- get_coef_df(elastic_res, "elastic")
-
-  ## ---------- 5. Merge all coefficients ----------
-  coef_table <- glm_coef_df %>%
-    full_join(ridge_coef_df,   by = "variable") %>%
-    full_join(lasso_coef_df,   by = "variable") %>%
-    full_join(elastic_coef_df, by = "variable")
-
-  # Make sure we have all variables that appear in X, even if dropped in glm
-  # (e.g., due to singularities)
-  all_vars <- setdiff(colnames(X), "(Intercept)")
-  coef_table <- coef_table %>%
-    right_join(tibble(variable = all_vars), by = "variable") %>%
-    arrange(variable)
-
-  ## ---------- 6. Selection indicators ----------
-  coef_table <- coef_table %>%
-    mutate(
-      ridge_selected   = if_else(!is.na(ridge_coef)   & abs(ridge_coef)   > ridge_threshold, TRUE, FALSE),
-      lasso_selected   = if_else(!is.na(lasso_coef)   & lasso_coef   != 0, TRUE, FALSE),
-      elastic_selected = if_else(!is.na(elastic_coef) & elastic_coef != 0, TRUE, FALSE)
-    )
-
-  ## ---------- 7. Print a compact table ----------
-  cat("\n=== Variable selection summary ===\n")
-  print(
-    coef_table %>%
-      dplyr::select(variable,
-                    glm_p,
-                    ridge_coef, ridge_selected,
-                    lasso_coef, lasso_selected,
-                    elastic_coef, elastic_selected)
-  )
-
-  ## ---------- 8. Return everything for further use ----------
-  invisible(list(
-    glm_fit = glm_fit,
-    ridge   = ridge_res,
-    lasso   = lasso_res,
-    elastic = elastic_res,
-    coef_table = coef_table
-  ))
-}
 
 
 prepare_boruta_plot_data <- function(boruta_res, decision_col = "Boruta.res") {
@@ -305,6 +190,7 @@ targets_for_fs_imputed <- trigeminale_training_data[,variables_by_categories$Psy
 
 rownames(variables_for_fs_imputed) <- trigeminale_training_data$ID
 rownames(targets_for_fs_imputed) <- trigeminale_training_data$ID
+names(variables_for_fs_imputed) <- make.names(names(variables_for_fs_imputed))
 
 
 # Load validation data (imputed)
@@ -319,6 +205,7 @@ targets_for_fs_imputed_validation <- trigeminale_validation_data[,variables_by_c
 
 rownames(variables_for_fs_imputed_validation) <- trigeminale_validation_data$ID
 rownames(targets_for_fs_imputed_validation) <- trigeminale_validation_data$ID
+names(variables_for_fs_imputed_validation) <- make.names(names(variables_for_fs_imputed_validation))
 
 # ============================================================================ #
 # 5. DATA TRANSFORMATION AND PREPROCESSING
@@ -390,7 +277,7 @@ reg_modulators_resultat <- pbmcapply::pbmclapply(c("Lateralization (x/20)", "Amm
   Boruta_res <- Boruta::Boruta(x = actual_data,
                                y = targets_for_fs_imputed[[reg_target_varname]], ntree = best[["ntree"]], mtry = best[["mtry"]], maxRuns = 1000, doTrace = TRUE)
 
-  penalized_regression_res <- run_penalized_regression_all(
+  penalized_regression_res <- run_penalized_regression_remove_colinear_all(
     train_data   = actual_data,
     train_target = targets_for_fs_imputed[[reg_target_varname]],
     alpha_elastic = 0.5,

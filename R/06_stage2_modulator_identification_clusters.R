@@ -27,6 +27,27 @@
 ################################################################################
 
 # ============================================================================ #
+# PART 2: MACHINE LEARNING FRAMEWORK — Cluster Modulator Identification
+# ============================================================================ #
+# Classification analyses linking 220 non-trigeminal candidate modulators
+# (demographics, medical, lifestyle, olfactory) to trigeminal cluster membership.
+# 
+# Model Development: Training set only (n=800)
+# Validation: Independent held-out set (n=201)
+# 
+# Feature Selection: Boruta algorithm (RF-based importance)
+# Classification Methods: Multinomial logistic, Ridge, Lasso, Elastic Net, Random Forest
+# Hyperparameter Tuning: 5-fold cross-validation for λ; grid search for RF
+# Performance Metric: Balanced accuracy with 95% bootstrap CI
+# 
+# Post-hoc Characterization: Selected variables assessed with Wilcoxon/Spearman
+# Cross-dataset Validation: Effect size concordance via Kendall's τ
+# 
+# See README.md "PART 2" > "Prediction of cluster membership from candidate modulators"
+# and manuscript Methods for full technical details
+# ============================================================================ #
+
+# ============================================================================ #
 # 1. LOAD REQUIRED LIBRARIES
 # ============================================================================ #
 
@@ -49,166 +70,6 @@ dark_colors <- darken(original_colors, amount = 0.3)
 # ============================================================================ #
 # 3. HELPER FUNCTIONS
 # ============================================================================ #
-
-run_penalized_multinomial_all <- function(train_data,
-                                          train_target,
-                                          alpha_elastic = 0.5,
-                                          nfolds = 5,
-                                          seed = 42,
-                                          ridge_threshold = 0.05,
-                                          any_class_selection = TRUE) {
-  cat(sprintf("Penalized Multinomial Regression (ridge, lasso, elastic net) ===\n"))
-  cat(sprintf(
-    "Dataset: %d features, %d samples\n",
-    ncol(train_data), nrow(train_data)
-  ))
-
-  if (ncol(train_data) == 0 || nrow(train_data) == 0) {
-    cat("No data available - skipping\n")
-    return(NULL)
-  }
-
-  ## 1. Outcome and design matrix
-  y <- as.factor(train_target)
-  X <- model.matrix(~., data = train_data)[, -1, drop = FALSE]
-
-  ## ---------- NEW: Unpenalized multinomial model ----------
-  df_glm <- train_data
-  df_glm$target <- y
-
-  multinom_fit <- nnet::multinom(target ~ ., data = df_glm, trace = FALSE)
-
-  # Extract coefficients (matrix: classes x variables)
-  coef_mat <- coef(multinom_fit)
-
-  # Handle binary case (returns vector instead of matrix)
-  if (is.vector(coef_mat)) {
-    coef_mat <- matrix(coef_mat, nrow = 1)
-    rownames(coef_mat) <- levels(y)[2]
-  }
-
-  glm_long <- as.data.frame(coef_mat) %>%
-    tibble::rownames_to_column("class") %>%
-    tidyr::pivot_longer(-class, names_to = "variable", values_to = "glm_coef")
-
-  s <- summary(multinom_fit)
-  z_mat <- s$coefficients / s$standard.errors
-  p_mat <- (1 - pnorm(abs(z_mat), 0, 1)) * 2
-  if (is.vector(p_mat)) {
-    p_mat <- matrix(p_mat, nrow = 1)
-    rownames(p_mat) <- levels(y)[2]
-  }
-  glm_pval_long <- as.data.frame(p_mat) %>%
-    tibble::rownames_to_column("class") %>%
-    tidyr::pivot_longer(-class, names_to = "variable", values_to = "glm_pval")
-
-  ## --------------------------------------------------------
-
-  set.seed(seed)
-
-  fit_penalized_multinom <- function(alpha_value) {
-    cv_fit <- glmnet::cv.glmnet(
-      x = X,
-      y = y,
-      family = "multinomial",
-      alpha = alpha_value,
-      nfolds = nfolds
-    )
-    best_lambda <- cv_fit$lambda.min
-    final_model <- glmnet::glmnet(
-      x = X,
-      y = y,
-      family = "multinomial",
-      alpha = alpha_value,
-      lambda = best_lambda
-    )
-    list(
-      cv_fit = cv_fit,
-      model = final_model,
-      lambda = best_lambda
-    )
-  }
-
-  ridge_res <- fit_penalized_multinom(alpha_value = 0)
-  lasso_res <- fit_penalized_multinom(alpha_value = 1)
-  elastic_res <- fit_penalized_multinom(alpha_value = alpha_elastic)
-
-  cat(sprintf("ridge   lambda.min = %g\n", ridge_res$lambda))
-  cat(sprintf("lasso   lambda.min = %g\n", lasso_res$lambda))
-  cat(sprintf(
-    "elastic lambda.min = %g (alpha = %.2f)\n",
-    elastic_res$lambda, alpha_elastic
-  ))
-
-  ## Extract penalized coefficients
-  get_coef_long <- function(res, label) {
-    cf_list <- coef(res$model)
-    purrr::map_dfr(names(cf_list), function(cls) {
-      mat <- as.matrix(cf_list[[cls]])
-      tibble::tibble(
-        class    = cls,
-        variable = rownames(mat),
-        coef     = as.numeric(mat)
-      )
-    }) %>%
-      dplyr::filter(variable != "(Intercept)") %>%
-      dplyr::rename(!!paste0(label, "_coef") := coef)
-  }
-
-  ridge_long <- get_coef_long(ridge_res, "ridge")
-  lasso_long <- get_coef_long(lasso_res, "lasso")
-  elastic_long <- get_coef_long(elastic_res, "elastic")
-
-  ## ---------- UPDATED MERGE: include glm ----------
-  coef_table <- glm_long %>%
-    dplyr::full_join(glm_pval_long, by = c("variable", "class")) %>%
-    dplyr::full_join(ridge_long, by = c("variable", "class")) %>%
-    dplyr::full_join(lasso_long, by = c("variable", "class")) %>%
-    dplyr::full_join(elastic_long, by = c("variable", "class")) %>%
-    dplyr::arrange(variable, class)
-
-  ## Selection indicators
-  coef_table <- coef_table %>%
-    dplyr::mutate(
-      glm_selected     = dplyr::if_else(!is.na(glm_pval) & glm_pval < 0.05, TRUE, FALSE),
-      ridge_selected   = dplyr::if_else(!is.na(ridge_coef) & abs(ridge_coef) > ridge_threshold, TRUE, FALSE),
-      lasso_selected   = dplyr::if_else(!is.na(lasso_coef) & lasso_coef != 0, TRUE, FALSE),
-      elastic_selected = dplyr::if_else(!is.na(elastic_coef) & elastic_coef != 0, TRUE, FALSE)
-    )
-
-  cat("\n=== Variable selection summary (per class) ===\n")
-  print(
-    coef_table %>%
-      dplyr::select(
-        variable, class,
-        glm_coef, glm_selected,
-        ridge_coef, ridge_selected,
-        lasso_coef, lasso_selected,
-        elastic_coef, elastic_selected
-      )
-  )
-
-  if (any_class_selection) {
-    var_level <- coef_table %>%
-      dplyr::group_by(variable) %>%
-      dplyr::summarise(
-        ridge_selected_any = any(ridge_selected),
-        lasso_selected_any = any(lasso_selected),
-        elastic_selected_any = any(elastic_selected),
-        .groups = "drop"
-      )
-    cat("\n=== Variable-level selection (any class) ===\n")
-    print(var_level)
-  }
-
-  invisible(list(
-    multinom_fit = multinom_fit, # NEW
-    ridge = ridge_res,
-    lasso = lasso_res,
-    elastic = elastic_res,
-    coef_table = coef_table
-  ))
-}
 
 prepare_boruta_plot_data <- function(boruta_res, decision_col = "Boruta.res") {
   # Melt importance history
@@ -368,6 +229,8 @@ rownames(trig_valid_final) <- trig_valid_final$ID
 # Remove ID columns
 trig_train_final$ID <- NULL
 trig_valid_final$ID <- NULL
+names(trig_train_final) <- make.names(names(trig_train_final))
+names(trig_valid_final) <- make.names(names(trig_valid_final))
 
 
 # ============================================================================ #
@@ -411,7 +274,7 @@ clusters_trig_modulators_resultat <- pbmcapply::pbmclapply(c("regression", "RF")
       )
     },
     "regression" = {
-      res_classification <- run_penalized_multinomial_all(
+      res_classification <- run_penalized_multinomial_remove_colinear_all(
         train_data = actual_data,
         train_target = as.factor(clusters_training),
         alpha_elastic = 0.5,

@@ -59,6 +59,7 @@ library(nVennR)         # Venn diagrams
 library(patchwork)      # Plot composition
 library(scales)         # Scale functions
 library(viridis)        # Color scales
+library(ggnewscale)     # Color scales
 
 # Statistical analysis
 library(boot)           # Bootstrap methods

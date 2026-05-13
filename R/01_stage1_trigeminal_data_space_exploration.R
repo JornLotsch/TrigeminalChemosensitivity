@@ -49,6 +49,15 @@ plot(as.numeric(trigeminale_data_raw$ID) ~ as.numeric(trigeminale_data$ID))
 
 
 # ========================================================================== #
+# PART 1: EXPLORATORY ANALYSIS
+# ========================================================================== #
+# Uses complete merged imputed dataset (n=1,001)
+# Hypothesis-generating; no held-out validation
+# Analyses: Correlations, PCA, ABC importance, exploratory regression screening
+# See README.md "PART 1" section and manuscript Methods for full details
+# ========================================================================== #
+
+# ========================================================================== #
 # INITIAL DATA VISUALIZATION - HEATMAP OVERVIEW
 # ========================================================================== #
 
@@ -382,6 +391,28 @@ print(p_table_AmmoLa_vs_lateralization_most_sensitive)
 print("Minimum value in AmmoLa_intensity")
 print(min(trigeminal_measures_data$AmmoLa_intensity))
 
+# ========================================================================== #
+# DISTRIBUTION ASSESSMENT & TRANSFORMATION
+# ========================================================================== #
+# Method: Tukey's ladder of powers (λ = -2, -1, -0.5, 0, 0.5, 1, 2)
+#         with Box-Cox reference; D'Agostino's K² normality test
+# 
+# AmmoLa intensity (left-skewed, ceiling effects):
+#   - Transformation: Reflected sign-preserving log (Norris 2004; Feng 2014)
+#   - Formula: -sign(max+1-x) * log10(|max+1-x|+1)
+#   - Rationale: Handles ceiling at 90 by reflection; log stabilizes variance
+# 
+# CO₂ threshold (right-skewed; lower threshold = higher sensitivity):
+#   - Transformation: Sign-inverted log (sign-flip important for interpretation)
+#   - Formula: -sign(threshold) * log10(|threshold|+1)
+#   - Rationale: Inversion makes higher values = higher sensitivity; log handles skew
+# 
+# Lateralization: Approximately normal (D'Agostino K² p > 0.05)
+#   - Retained untransformed; only rescaled to [0,3]
+# 
+# See README.md "Data Processing" > "Distribution Assessment & Transformations"
+# ========================================================================== #
+
 if (!analyze_only_untransformed) {
   cat("\nApplying variable transformations...\n")
 
@@ -390,7 +421,7 @@ if (!analyze_only_untransformed) {
     mutate(
       AmmoLa_intensity_reflect_slog = reflect_slog_unflipped(AmmoLa_intensity),
       Lateralization = Lateralization,
-      CO2_threshold_log = -slog(CO2_threshold) # replace regular log by slog for consistency
+      CO2_threshold_log = -slog(CO2_threshold) # Sign-preserved log with sign inversion
     )
 }
 
@@ -747,6 +778,10 @@ trigeminal_measures_data_CO2_long <- trigeminal_measures_data_CO2 %>%
     names_to = "variable",
     values_to = "value"
   )
+
+trigeminal_measures_data_CO2_long %>%
+  group_by(subset_group) %>%
+  summarise(non_nas2_count = sum(!is.na(value)), .groups = "drop")
 
 if (plot_only_untransformed) {
   trigeminal_measures_data_CO2_long <- trigeminal_measures_data_CO2_long[
@@ -2064,6 +2099,272 @@ print(combined_TriFunQ_PCA_plot)
 # Save combined figure
 ggsave("combined_TriFunQ_PCA_plot.svg", combined_TriFunQ_PCA_plot, width = 18, height = 18)
 ggsave("combined_TriFunQ_PCA_plot.png", combined_TriFunQ_PCA_plot, width = 18, height = 18, dpi = 300)
+
+
+# ========================================================================== #
+# REGRESSION ANALYSIS OF ALL MODULATORS TO PSYCHOPHYSICAL MEASURES
+# ========================================================================== #
+
+significance_Level <- 0.05
+VIF_LIMIT <- 10
+
+
+# Create data matrix
+variables_for_regression_imputed_all <- trigeminale_data[, !names(trigeminale_data) %in%
+                                                           c(variables_by_categories$Nasal_chemosensory_perception,
+                                                             variables_by_categories$Psychophysical_measurements[c(1,2,4)], "ID"),]
+names(variables_for_regression_imputed_all) <- make.names(names(variables_for_regression_imputed_all))
+
+psychophysical_targets_all <- cbind.data.frame(
+  AmmoLa_transformed        = reflect_slog_unflipped(trigeminale_data$`AmmoLa intensity`),
+  Lateralization            = trigeminale_data$`Lateralization (x/20)`,
+  CO2_threshold_transformed = -slog(trigeminale_data$`CO2 threshold`)
+)
+names(psychophysical_targets_all) <- make.names(names(psychophysical_targets_all))
+
+regression_analysis_complete_imputed_data <- pbmcapply::pbmclapply(
+  names(psychophysical_targets_all),
+  function(Target) {
+
+    reg_results <- run_penalized_regression_remove_colinear_all(
+      train_data   = variables_for_regression_imputed_all,
+      train_target = psychophysical_targets_all[[Target]],
+      vif_limit    = VIF_LIMIT
+    )
+
+    reg_results$coef_table$glm_selected <- reg_results$coef_table$glm_p < significance_Level
+
+    glm_full_summary <- as.data.frame(summary(reg_results$glm_fit)$coefficients)
+    glm_full_summary$variable <- rownames(glm_full_summary)
+    rownames(glm_full_summary) <- NULL
+    glm_full_summary <- glm_full_summary[glm_full_summary$variable != "(Intercept)", ]
+    glm_full_summary$lm_selected <- glm_full_summary[["Pr(>|t|)"]] < significance_Level
+
+    merge(as.data.frame(reg_results$coef_table), glm_full_summary, by = "variable", all = TRUE)
+  },
+  mc.cores = length(names(psychophysical_targets_all))
+)
+names(regression_analysis_complete_imputed_data) <- names(psychophysical_targets_all)
+
+# Save results
+
+regression_analysis_complete_imputed_data_all_results <- bind_rows(
+  lapply(names(regression_analysis_complete_imputed_data), function(target_name) {
+    regression_analysis_complete_imputed_data[[target_name]] %>%
+      mutate(target_name = target_name)
+  })
+) %>%
+  dplyr::select(target_name, everything())
+
+names(regression_analysis_complete_imputed_data_all_results) <-
+  c("target_name", "variable", "glm_estimate", "glm_p", "ridge_coef", "lasso_coef", "elastic_coef",
+    "ridge_selected", "lasso_selected", "elastic_selected", "glm_selected", "glm_estimate_colinear_removed",
+    "StdError_colinear_removed", "t.value_colinear_removed", "glm_p_colinear_removed", "glm_selected_colinear_removed")
+
+write.csv(regression_analysis_complete_imputed_data_all_results,
+          "regression_analysis_complete_dataset_modulators_all_targets.csv",
+          row.names = FALSE)
+
+# ========================================================================== #
+# PLOT REGRESSION ANALYSIS RESULTS
+# ========================================================================== #
+
+
+regression_analysis_complete_imputed_data_all_results_plots <- pbmcapply::pbmclapply(
+  names(psychophysical_targets_all),
+  function(Target) {
+
+
+    ######################### Prepare Label Data ######################################################
+
+    actual_data <- regression_analysis_complete_imputed_data_all_results[regression_analysis_complete_imputed_data_all_results$target_name == Target,]
+    actual_data <- actual_data %>% dplyr::mutate(Score_id = row_number())
+
+
+    # Create outer label data with Score and Reference
+    label_data <- actual_data %>%
+      dplyr::distinct(variable, Score_id) %>%
+      dplyr::arrange(Score_id)
+
+    n_bar <- nrow(label_data)
+    message(sprintf("  - Unique scores for plotting: %d", n_bar))
+
+    # Calculate label angles for circular plot
+    label_data <- label_data %>%
+      dplyr::mutate(
+        angle_raw = 90 - 360 * (Score_id - 0.5) / n_bar,
+        hjust = ifelse(angle_raw < -90, 1, 0),
+        angle = ifelse(angle_raw < -90, angle_raw + 180, angle_raw)
+      )
+
+    ######################### Create Circular Plot ######################################################
+
+
+    message("Creating circular variant scores plot...")
+
+    p_regression_analysis_complete_imputed_data <- ggplot() +
+      # glm_selected ring (innermost)
+      geom_rect(
+        data = actual_data,
+        aes(
+          xmin = Score_id - 0.45,
+          xmax = Score_id + 0.45,
+          ymin = 0.8,
+          ymax = 1.5,
+          fill = glm_selected_colinear_removed
+        ),
+        color = "white", size = 0.3
+      ) +
+      scale_fill_manual(values = actual_palette[c(1,4)], na.value = "grey95", name = "GLM selected") +
+      ggnewscale::new_scale_fill() +
+
+      # ridge_selected ring
+      geom_rect(
+        data = actual_data,
+        aes(
+          xmin = Score_id - 0.45,
+          xmax = Score_id + 0.45,
+          ymin = 1.8,
+          ymax = 2.5,
+          fill = ridge_selected
+        ),
+        color = "white", size = 0.3
+      ) +
+      scale_fill_manual(values = actual_palette[c(1,4)], na.value = "grey95", name = "Ridge selected") +
+      ggnewscale::new_scale_fill() +
+
+      # lasso_selected ring
+      geom_rect(
+        data = actual_data,
+        aes(
+          xmin = Score_id - 0.45,
+          xmax = Score_id + 0.45,
+          ymin = 2.8,
+          ymax = 3.5,
+          fill = lasso_selected
+        ),
+        color = "white", size = 0.3
+      ) +
+      scale_fill_manual(values = actual_palette[c(1,4)], na.value = "grey95", name = "LASSO selected") +
+      ggnewscale::new_scale_fill() +
+
+      # elastic_selected ring (outermost)
+      geom_rect(
+        data = actual_data,
+        aes(
+          xmin = Score_id - 0.45,
+          xmax = Score_id + 0.45,
+          ymin = 3.8,
+          ymax = 4.5,
+          fill = elastic_selected
+        ),
+        color = "white", size = 0.3
+      ) +
+      scale_fill_manual(values = actual_palette[c(1,4)], na.value = "grey95", name = "Elastic net selected") +
+      ggnewscale::new_scale_fill() +
+
+      # Score labels (outer)
+      geom_text(
+        data = label_data,
+        aes(x = Score_id, y = 4.6, label = variable, angle = angle, hjust = hjust),
+        size = 2.2,
+        fontface = "plain"
+      ) +
+
+      # Ring category labels with semi-transparent background
+      geom_label(
+        data = data.frame(
+          x = 1,
+          y = c(1, 2, 3, 4),
+          label = c("GLM selected", "Ridge selected", "LASSO selected", "Elastic net selected")
+        ),
+        aes(x = x, y = y, label = label),
+        size = 3.8,
+        fontface = "bold",
+        color = "black",
+        fill = "white",
+        alpha = 0.7,
+        label.size = 0,
+        label.padding = unit(0.15, "lines")
+      ) +
+
+      coord_polar(
+        start = 0,
+        clip = "off"
+      ) +
+      scale_y_continuous(
+        limits = c(0, 5.4),
+        expand = c(0, 0)
+      )+
+      theme_void() +
+      theme(
+        aspect.ratio = 1,
+        legend.position = "bottom",
+        legend.direction = "vertical",
+        legend.box = "horizontal",
+        legend.box.just = "center",
+        legend.spacing.x = unit(0.3, "cm"),
+        legend.spacing.y = unit(0.05, "cm"),
+        legend.title = element_text(size = 7, face = "plain"),
+        legend.text = element_text(size = 5.5),
+        legend.key.size = unit(0.25, "cm"),
+        legend.key.height = unit(0.25, "cm"),
+        legend.key.width = unit(0.25, "cm"),
+        legend.margin = ggplot2::margin(0, 0, 0, 0),
+        legend.box.margin = ggplot2::margin(-10, 0, 0, 0),
+        plot.margin = ggplot2::margin(20, 20, 20, 20)
+      ) +
+      guides(
+        `Genomic scope` = guide_legend(order = 1, ncol = 1),
+        Category = guide_legend(order = 2, ncol = 1),
+        `Variant types` = guide_legend(order = 3, ncol = 1),
+        `Model type` = guide_legend(order = 4, ncol = 2)
+      ) +
+      labs(title = paste0("Regression-selected modulators of ", Target))
+
+  },
+  mc.cores = length(names(psychophysical_targets_all))
+)
+names(regression_analysis_complete_imputed_data_all_results_plots) <- names(psychophysical_targets_all)
+
+# print(p_regression_analysis_complete_imputed_data_all_results)
+
+
+######################### Combine Plot ######################################################
+
+p_regression_analysis_complete_imputed_data_all_results_final <-
+  wrap_plots(plots2, nrow = 1, guides = "keep") +
+  plot_layout(widths = rep(1, length(plots2))) +
+  plot_annotation(
+    title = "Regression analysis of modulators of psychophysical measures of trigeminal sensitivity",
+    tag_levels = "A"
+  ) &
+  theme(
+    plot.title = element_text(size = 14, face = "plain", hjust = 0),
+    plot.margin = ggplot2::margin(20, 20, 20, 20),
+    panel.spacing = unit(1, "lines")
+  )
+
+print(p_regression_analysis_complete_imputed_data_all_results_final)
+
+######################### Save Plot ######################################################
+
+
+message("Saving plot...")
+ggsave(
+  "p_regression_analysis_complete_imputed_data_all_results_final.svg",
+  p_regression_analysis_complete_imputed_data_all_results_final,
+  width = 40,
+  height = 16,
+  dpi = 300
+)
+ggsave(
+  "p_regression_analysis_complete_imputed_data_all_results_final.png",
+  p_regression_analysis_complete_imputed_data_all_results_final,
+  width = 36,
+  height = 14,
+  dpi = 300
+)
 
 
 # ========================================================================== #

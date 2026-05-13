@@ -8,13 +8,28 @@ Computational pipeline for characterizing trigeminal sensitivity phenotypes and 
 
 ## Analysis Design
 
-**Two-stage workflow:**
-- **Stage 1:** Exploratory analysis (correlations, PCA) → Unsupervised clustering for phenotypes → Supervised cluster classification
-- **Stage 2:** Regression models for psychophysical measures → Modulator identification
+**Two complementary analytical levels:**
+1. **Internal trigeminal data structure**: 21 variables (3 psychophysical measures + 18 TriFunQ items)
+2. **External modulatory factors**: 220 non-trigeminal candidate predictors (demographic, medical, lifestyle, olfactory)
 
-**Validation framework:** Train/validation split (80%/20%) before imputation. All models trained on training set, validated on held-out data.
+**Two-part workflow:**
 
-See manuscript Methods for full details.
+**Part 1: Exploratory Analysis (Complete Imputed Dataset, n=1,001)**
+- Correlation analysis and PCA of trigeminal variables
+- Regression screening of 220 candidate modulators against 3 psychophysical measures
+- Descriptive, hypothesis-generating; no held-out validation
+- *Files:* [01_stage1_trigeminal_data_space_exploration.R](R/01_stage1_trigeminal_data_space_exploration.R)
+
+**Part 2: Machine Learning Framework (Train/Validation Split, 80%/20%)**
+- All model development confined to training set (n=800)
+- Derivation of composite trigeminal phenotype via unsupervised clustering
+- Supervised models: Predict psychophysical measures and cluster membership
+- Generalization: Evaluated exclusively on validation set (n=201)
+- *Files:* [02_stage1_trigeminal_clustering_phenotype_derivation.R](R/02_stage1_trigeminal_clustering_phenotype_derivation.R), [03_stage1_trigeminal_cluster_classification.R](R/03_stage1_trigeminal_cluster_classification.R), [05_psychophysical_regression_analysis.R](R/05_psychophysical_regression_analysis.R), [06_stage2_modulator_identification_psychophysical.R](R/06_stage2_modulator_identification_psychophysical.R), [07_stage2_modulator_identification_clusters.R](R/07_stage2_modulator_identification_clusters.R)
+
+**Critical design feature:** Train/validation split executed *before* imputation to prevent information leakage from held-out participants.
+
+See manuscript Methods for full technical details.
 
 ## Table of Contents
 
@@ -37,10 +52,10 @@ See manuscript Methods for full details.
 - Data handling: `dplyr`, `tidyr`, `reshape2`
 - Visualization: `ggplot2`, `ggpubr`, `cowplot`, `patchwork`, `ComplexHeatmap`
 - Distribution modeling: `opGMMassessment`, `DataVisualizations`
-- Imputation: `missForest`
-- Dimensionality reduction: `FactoMineR`, `factoextra`
+- Imputation: `missRanger` (random forest-based with predictive mean matching)
+- Dimensionality reduction: `FactoMineR`, `factoextra`, `EDOtrans`, `fastICA`, `Rtsne`, `uwot`
 - Clustering: `cluster`, `NbClust`, `dendextend`
-- Statistical analysis: `psych`, `MASS`, `boot`, `effsize`
+- Statistical analysis: `psych`, `MASS`, `boot`, `effsize`, `car`, `glmnet`, `randomForest`, `Boruta`, `nnet`
 
 ## Repository Structure
 
@@ -49,48 +64,81 @@ See manuscript Methods for full details.
 ├── Core Infrastructure
 │   ├── utils.R                                     [General utility functions: 25 helpers]
 │   ├── globals.R                                   [Global config: libraries, colors, labels]
-│   └── ProjectionsBiomed_MainFunctions_6_1core.R  [Helper library for projection methods]
+│   └── ProjectionsBiomed_MainFunctions_6_1core.R   [Helper library for projection methods]
 │
 ├── Data Processing Pipeline (Required)
-│   ├── read_data_and_basic_corrections.R          [Data import & validation]
-│   └── build_analysis_dataset.R                   [Dataset construction: 242 variables]
-│
-├── *** REPORTED ANALYSES (Manuscript) ***
-│   ├── Data Preparation
-│   │   ├── read_data_and_basic_corrections.R       [Data import & validation]
-│   │   └── build_analysis_dataset.R                [Dataset construction: 241 variables]
-│   │
-│   ├── Stage 1: Trigeminal Data Space Characterization & Phenotyping
-│   │   ├── 01_stage1_trigeminal_data_space_exploration.R
-│   │   │   └─ Exploratory analysis: correlations, PCA, variable importance
-│   │   │
-│   │   ├── 02_stage1_trigeminal_clustering_phenotype_derivation.R
-│   │   │   └─ Unsupervised clustering: composite trigeminal phenotype derivation
-│   │   │
-│   │   ├── 03_stage1_trigeminal_cluster_classification.R
-│   │   │   └─ Supervised classification of cluster membership
-│   │   │
-│   │   └── 04_stage1_trigeminal_cluster_interpretation.R
-│   │       └─ Clinical and biological cluster interpretation
-│   │
-│   └── Stage 2: Psychophysical Regression & Modulator Identification
-│       ├── 05_psychophysical_regression_analysis.R
-│       │   └─ Regression models: AmmoLa, CO₂ threshold, Lateralization
-│       │
-│       ├── 06_stage2_modulator_identification_psychophysical.R
-│       └── 07_stage2_modulator_identification_clusters.R
-│           └─ Identification of demographic, medical, lifestyle modulators
-│
-├── *** EXPLORATORY ANALYSES (Not part of core reported pipeline) ***
-│   ├── trigeminal_measures_clustering_y_trig_2.R
-│   │   └─ Alternative clustering approach (kept for reproducibility)
-│   │
-│   ├── descriptive_statistics_overview.R             [Cohort characteristics]
+│   ├── read_data_and_basic_corrections.R             [Data import & validation]
+│   |── build_analysis_dataset.R                      [Dataset construction: 242 variables]
 │   ├── smoking_overview.R                            [Smoking patterns]
 │   ├── facial_pain_overview.R                        [Facial pain]
 │   ├── chronic_diseases_overview.R                   [Disease comorbidity]
 │   ├── covid_overview.R                              [COVID-19 effects]
 │   └── nasal_breathing_and_ENT_surgery_overview.R    [Nasal/ENT factors]
+|
+│
+├── *** REPORTED ANALYSES (Manuscript) ***
+│
+│   ├── Data Preparation
+│   │   ├── read_data_and_basic_corrections.R       [Data import & validation]
+│   │   └── build_analysis_dataset.R                [Dataset construction: 241 variables; sample filtering]
+│   │
+│   ├── PART 1: EXPLORATORY ANALYSIS (Complete Imputed Dataset, n=1,001)
+│   │   │
+│   │   └── 01_stage1_trigeminal_data_space_exploration.R
+│   │       ├─ Spearman rank correlations (210 pairs, 21 variables)
+│   │       ├─ PCA of trigeminal variables (Kaiser-Guttman: eigenvalue > 1)
+│   │       ├─ ABC analysis for variable importance ranking
+│   │       └─ Exploratory regression: 220 candidate modulators → 3 psychophysical measures
+│   │          (Hypothesis-generating; no validation; see Methods for multiple testing context)
+│   │
+│   ├── PART 2: MACHINE LEARNING FRAMEWORK (Train/Validation Split: 80%/20%, n=800/201)
+│   │   │
+│   │   ├── 02_stage1_trigeminal_clustering_phenotype_derivation.R
+│   │   │   ├─ Training data only: 48 clustering solutions (6 projections × 8 algorithms)
+│   │   │   ├─ Projection methods: EDOtrans, PCA, ICA, MDS, t-SNE, UMAP
+│   │   │   ├─ Clustering algorithms: k-means, PAM, hierarchical (6 linkages)
+│   │   │   ├─ Optimal clusters: NbClust (30 validity indices, majority vote)
+│   │   │   ├─ Quality metric: Calinski-Harabasz index; null model comparison
+│   │   │   └─ Validation: Nearest-centroid assignment; silhouette width
+│   │   │
+│   │   ├── 03_stage1_trigeminal_cluster_classification.R
+│   │   │   ├─ Supervised classification: Cluster membership (categorical outcome)
+│   │   │   ├─ Predictors: 20 remaining trigeminal variables
+│   │   │   ├─ Models: Multinomial logistic, penalized variants, random forest
+│   │   │   ├─ Training: Training set only
+│   │   │   └─ Validation: Held-out validation set; balanced accuracy with 95% CI
+│   │   │
+│   │   ├── 04_stage1_trigeminal_cluster_interpretation.R
+│   │   │   ├─ Cluster characterization: Kruskal-Wallis tests (effect size η²; 95% CI)
+│   │   │   ├─ Psychometric interpretation: TriFunQ dimensions (sensitivity + avoidance)
+│   │   │   └─ Cross-dataset concordance: Kendall's τ (training vs. validation)
+│   │   │
+│   │   ├── 05_psychophysical_regression_analysis.R
+│   │   │   ├─ Continuous outcomes: 3 psychophysical measures (transformed)
+│   │   │   ├─ Predictors: 20 remaining trigeminal variables
+│   │   │   ├─ Models: OLS, ridge, lasso, elastic net (α=0.5), random forest
+│   │   │   ├─ Training: Training set; λ tuned by 5-fold CV
+│   │   │   ├─ Random forest: mtry & ntree optimized by grid search
+│   │   │   └─ Validation: Nonlinear LS regression (slope & significance test)
+│   │   │
+│   │   ├── 06_stage2_modulator_identification_psychophysical.R
+│   │   │   ├─ Same regression framework as Step 5
+│   │   │   ├─ Predictors: 220 non-trigeminal candidate modulators
+│   │   │   ├─ Outcomes: 3 psychophysical measures
+│   │   │   ├─ Feature importance: Lasso selection + Boruta (≤1,000 iterations)
+│   │   │   └─ Concordance: Wilcoxon/Spearman with Kendall's τ across datasets
+│   │   │
+│   │   └── 07_stage2_modulator_identification_clusters.R
+│   │       ├─ Multinomial classification: Cluster membership (categorical outcome)
+│   │       ├─ Predictors: 220 non-trigeminal candidate modulators
+│   │       ├─ Models: Multinomial logistic, penalized variants, random forest
+│   │       ├─ Feature importance: Boruta with reduced feature set
+│   │       └─ Concordance: Wilcoxon/Spearman with Kendall's τ across datasets
+│
+
+│
+├── *** EXPLORATORY ANALYSES ***
+│   ├── descriptive_statistics_overview.R             [Cohort characteristics]
 │
 └── Data Files [Not version-controlled: raw and processed datasets stored locally]
 
@@ -109,54 +157,96 @@ See manuscript Methods for full details.
 **Files:** [read_data_and_basic_corrections.R](R/read_data_and_basic_corrections.R), [build_analysis_dataset.R](R/build_analysis_dataset.R)
 
 - Raw data import and validation
-- Variable recoding: 8 categories → 241 variables
-- Train/validation split (80%/20%) before imputation
-- Imputation: missRanger (random forest, k=5)
-- **Output: 21 trigeminal variables** (18 TriFunQ items + 3 psychophysical measures)
+- CO₂ sample filtering (breath-hold protocol only; n=453)
+- Variable recoding: 241 variables
+- **Train/validation split (80%/20%, n=800/201) executed BEFORE imputation** (critical for preventing information leakage)
+- Imputation: missRanger (random forest with PMM k=5; 500 trees; applied independently to training and validation sets)
+- Distribution assessment: Tukey's ladder of powers; transformations applied to AmmoLa and CO₂
+- **Output: 21 trigeminal variables** (18 TriFunQ items + 3 transformed psychophysical measures)
 
 ---
 
-### Stage 1: Characterization of Trigeminal Data Space
+### PART 1: Exploratory Analysis (Complete Imputed Dataset, n=1,001)
+
+**Objective:** Characterize internal trigeminal data structure and screen for candidate modulators using hypothesis-generating methods without held-out validation.
 
 #### Trigeminal Data Space Exploration
 
 **File:** [01_stage1_trigeminal_data_space_exploration.R](R/01_stage1_trigeminal_data_space_exploration.R)
 
-Spearman correlations, PCA, and variable importance analysis of the 21 trigeminal variables.
+- **Correlations:** Spearman rank (210 unique pairs; 95% CI via bootstrapping, 1,000 iterations)
+- **PCA:** Standardized 1,001 × 21 matrix; Kaiser-Guttman criterion (eigenvalue > 1)
+- **Variable importance:** ABC analysis (Pareto-based) on absolute standardized loadings; variables ranked into A/B/C subsets
+- **Exploratory screening:** Standard linear and 3 penalized approaches (ridge, lasso, elastic net; λ tuned by 5-fold CV) examining associations between 220 candidate modulators and each of 3 psychophysical measures
+  - *Note:* These are descriptive association screens; interpretation requires manuscript Methods context on multiple testing framework
 
-#### Derivation of Composite Trigeminal Phenotype (Trigeminal Clusters)
+---
+
+### PART 2: Machine Learning Framework (Train/Validation Split: n=800 training, n=201 validation)
+
+**Objective:** Derive composite trigeminal phenotype via unsupervised clustering (training set only) and evaluate supervised predictive models on independent validation data.
+
+#### Derivation of Composite Trigeminal Phenotype
 
 **File:** [02_stage1_trigeminal_clustering_phenotype_derivation.R](R/02_stage1_trigeminal_clustering_phenotype_derivation.R)
 
-Unsupervised clustering (48 combinations of 6 projections × 8 algorithms) to identify trigeminal phenotypes on training data (n=800). Validation and cross-dataset concordance assessment.
+**Training set only (800 × 21 matrix):**
+- **48 clustering solutions** systematically compared:
+  - 6 projection methods: EDOtrans, PCA, ICA, MDS, t-SNE, UMAP
+  - 8 clustering algorithms: k-means, PAM, hierarchical (complete, single, average, weighted, centroid, McQuitty, median)
+  - Dimensionality retained per method-specific criteria
+- **Optimal cluster number:** NbClust with 30 validity indices; majority voting
+- **Quality assessment:** Calinski-Harabasz index (primary criterion); null model comparison (3 permuted datasets)
+- **Validation set:** Participants projected to fitted training space; nearest-centroid assignment; silhouette width quantification
 
 #### Supervised Classification of Trigeminal Cluster Membership
 
 **File:** [03_stage1_trigeminal_cluster_classification.R](R/03_stage1_trigeminal_cluster_classification.R)
 
-Supervised classification of cluster membership using multinomial logistic regression, penalized variants, and random forest. Evaluated on validation set.
+- **Outcome:** Cluster membership (categorical)
+- **Predictors:** 20 remaining trigeminal variables (excluding 3 psychophysical outcomes used in clustering)
+- **Models:** Multinomial logistic, ridge, lasso, elastic net, random forest
+- **Hyperparameter tuning:** λ by 5-fold CV (penalized); mtry & ntree by grid search (RF)
+- **Training:** Training set only
+- **Validation:** Balanced accuracy with 95% bootstrap CI on held-out validation set
 
 #### Cluster Interpretation
 
 **File:** [04_stage1_trigeminal_cluster_interpretation.R](R/04_stage1_trigeminal_cluster_interpretation.R)
 
-Clinical and biological interpretation of derived clusters via TriFunQ psychometric dimensions.
+- **Trigeminal variable comparisons:** Kruskal-Wallis tests; effect sizes (η²) with 95% bootstrap CI
+- **Psychometric interpretation:** TriFunQ items a priori classified into sensitivity and avoidance dimensions
+- **Cross-dataset validation:** Effect size concordance (training vs. validation) assessed by Kendall's τ
 
----
-
-### Stage 2: Regression Analysis of Psychophysical Measures & Modulator Identification
-
-#### Regression Models: Predicting Psychophysical Measures
+#### Supervised Prediction of Psychophysical Measures (from trigeminal variables)
 
 **File:** [05_psychophysical_regression_analysis.R](R/05_psychophysical_regression_analysis.R)
 
-Regression models predicting each psychophysical measure (AmmoLa, CO₂, Lateralization) from remaining 20 trigeminal variables. OLS, penalized, and random forest approaches with validation on held-out data.
+- **Outcomes:** 3 transformed psychophysical measures (continuous)
+- **Predictors:** 20 remaining trigeminal variables
+- **Models:** OLS, ridge, lasso, elastic net (α=0.5), random forest
+- **Training:** Training set; λ tuned by 5-fold CV; RF: mtry & ntree by grid search
+- **Validation:** Nonlinear LS regression (predicted vs. observed) with slope significance test
 
-#### Identification of Modulators
+#### Supervised Prediction of Psychophysical Measures (from candidate modulators)
 
-**Files:** [06_stage2_modulator_identification_psychophysical.R](R/06_stage2_modulator_identification_psychophysical.R), [07_stage2_modulator_identification_clusters.R](R/07_stage2_modulator_identification_clusters.R)
+**File:** [06_stage2_modulator_identification_psychophysical.R](R/06_stage2_modulator_identification_psychophysical.R)
 
-Identification of demographic, medical, and lifestyle factors associated with trigeminal sensitivity and cluster membership using same regression pipeline (220 non-trigeminal candidate predictors).
+- **Same regression framework as Step 5**
+- **Predictors:** 220 non-trigeminal candidate modulators (demographic, medical, lifestyle, olfactory)
+- **Outcomes:** 3 psychophysical measures
+- **Feature importance:** Lasso-based variable selection; Boruta algorithm (≤1,000 iterations)
+- **Cross-dataset validation:** For models generalizing successfully, selected variables characterized independently in training & validation sets (Wilcoxon/Spearman); effect size concordance via Kendall's τ
+
+#### Supervised Classification of Cluster Membership (from candidate modulators)
+
+**File:** [07_stage2_modulator_identification_clusters.R](R/07_stage2_modulator_identification_clusters.R)
+
+- **Outcome:** Cluster membership (categorical)
+- **Predictors:** 220 non-trigeminal candidate modulators
+- **Models:** Multinomial logistic, ridge, lasso, elastic net, random forest (Boruta-reduced feature set)
+- **Validation:** Balanced accuracy with 95% bootstrap CI on held-out data
+- **Cross-dataset characterization:** Selected variables assessed independently in training & validation sets (effect size concordance via Kendall's τ)
 
 ---
 
@@ -178,12 +268,41 @@ Alternative clustering solution; not included in manuscript but available for me
 
 ## Data Processing
 
-See **Data Preparation** section above and manuscript Methods for preprocessing details.
+### Sample Inclusion & Protocol
+- CO₂ perception thresholds available for 453/1,001 participants
+- Uncontrolled breathing protocol (n=117): 17.1% ceiling effects
+- Breath-hold protocol (n=336): 5.4% ceiling effects
+- **Data from uncontrolled protocol excluded; analysis uses controlled breath-hold protocol only**
 
-**Variable Transformations:** [utils.R](R/utils.R)
-- **AmmoLa intensity:** Reflected sign-preserving log transformation → rescaled to [0, 3]
-- **CO₂ threshold:** Sign-preserving log transformation (sign-inverted) → rescaled to [0, 3]
-- **Lateralization:** Linear rescaling to [0, 3]
+### Variable Recoding & Construction
+- Continuous demographics (age, weight, height): retained unchanged
+- Categorical variables: one-hot encoded (gender) and manually standardized (diseases, surgeries, smoking, COVID-19)
+- TriFunQ items (15) and onion-related variables (3): assigned to trigeminal output space
+- Olfactory variables: continuous or recoded ordinal; odor identification untransformed
+- Nasal irritation/airflow: included without transformation
+- **Output: 241 variables × 1,001 participants; 1.75% missing (4,166 values)**
+
+### Distribution Assessment & Transformations
+- **Method:** Tukey's ladder of powers (λ = -2, -1, -0.5, 0, 0.5, 1, 2) with Box-Cox reference; D'Agostino's K² normality test
+- **AmmoLa intensity** (left-skewed, ceiling effects): Reflected sign-preserving log transformation
+  - Formula: $-\text{sign}(\max(\text{AmmoLa})+1-\text{AmmoLa}) \cdot \log_{10}(|\max(\text{AmmoLa})+1-\text{AmmoLa}|+1)$
+  - Rescaled to [0, 3]
+- **CO₂ threshold** (right-skewed; lower = higher sensitivity): Sign-inverted log transformation  
+  - Formula: $-\text{sign}(\text{CO}_2) \times \log_{10}(|\text{CO}_2|+1)$
+  - Rescaled to [0, 3]
+- **Lateralization** (approximately normal): Retained untransformed; rescaled to [0, 3]
+
+### Dataset Split & Imputation
+- **Split before imputation** (critical): Training (80%, n=800) and validation (20%, n=201) sets created first
+- **Imputation method:** missRanger (random forest-based; https://cran.r-project.org/package=missRanger)
+  - Predictive mean matching (k=5 nearest donors)
+  - Configuration: 500 trees, minimum node size = 5
+  - Type integrity enforced post-imputation (binary: [0,1]; ordinal: nearest integer; continuous: not rounded)
+- **Imputation fidelity:** Kernel-density overlap and Anderson-Darling tests (p=1.0) confirmed no distributional differences for CO₂ and lateralization
+- **Result:** Two independently imputed datasets (training and validation) used for all subsequent analyses
+
+### Variable Transformations (Summary)
+See [utils.R](R/utils.R) for transformation implementations.
 
 ---
 
@@ -197,14 +316,65 @@ utils.R → globals.R → analysis scripts
 
 **To Reproduce the Manuscript Analyses (in order):**
 
-**Step 0: Data Preparation (required)**
+---
+
+### Data Preparation (Required)
+
 ```r
 source("R/read_data_and_basic_corrections.R")
 source("R/build_analysis_dataset.R")
 ```
-Creates: Train/validation split (n=800/201), 21-variable trigeminal matrix
+**Output:** Train/validation split (n=800/201), independently imputed 21-variable trigeminal matrices
 
-**Optional: Exploratory Descriptive Context** (population characterization, not part of core pipeline)
+---
+
+### PART 1: Exploratory Analysis (Complete Imputed Dataset, n=1,001)
+
+This part is hypothesis-generating and descriptive; uses merged training + validation data.
+
+```r
+source("R/01_stage1_trigeminal_data_space_exploration.R")
+```
+**Output:** Correlations, PCA, variable importance, exploratory modulator screening
+
+---
+
+### PART 2: Machine Learning Framework (Train/Validation Split)
+
+All model development confined to training set; validation on held-out data.
+
+#### Step 2a: Derive Composite Trigeminal Phenotype
+```r
+source("R/02_stage1_trigeminal_clustering_phenotype_derivation.R")
+```
+**Output:** Trigeminal cluster assignments (training set → validated on held-out), quality metrics
+
+#### Step 2b: Supervised Cluster Classification
+```r
+source("R/03_stage1_trigeminal_cluster_classification.R")
+source("R/04_stage1_trigeminal_cluster_interpretation.R")
+```
+**Output:** Classification models, cluster characterization, psychometric interpretation
+
+#### Step 2c: Regression Models of Psychophysical Measures (trigeminal → psychophysical)
+```r
+source("R/05_psychophysical_regression_analysis.R")
+```
+**Output:** Regression models predicting AmmoLa, CO₂ threshold, Lateralization from trigeminal variables
+
+#### Step 2d: Modulator Identification (external candidates → psychophysical & clusters)
+```r
+source("R/06_stage2_modulator_identification_psychophysical.R")
+source("R/07_stage2_modulator_identification_clusters.R")
+```
+**Output:** Feature importance, modulator characterization, cross-dataset concordance
+
+---
+
+**Optional: Exploratory Population Context**
+
+These supplementary descriptive scripts are not part of the core reported pipeline but provide population-level context:
+
 ```r
 source("R/descriptive_statistics_overview.R")
 source("R/smoking_overview.R")
@@ -213,45 +383,6 @@ source("R/chronic_diseases_overview.R")
 source("R/covid_overview.R")
 source("R/nasal_breathing_and_ENT_surgery_overview.R")
 ```
-Produces: Supporting contextual characterization of cohort
-
----
-
-**Stage 1: Trigeminal Data Space Characterization** (core reported analyses)
-
-**Step 1a: Trigeminal Data Space Exploration**
-```r
-source("R/01_stage1_trigeminal_data_space_exploration.R")
-```
-Produces: Correlations, PCA results, variable importance
-
-**Step 1b: Derive Composite Trigeminal Phenotype (Clusters)**
-```r
-source("R/02_stage1_trigeminal_clustering_phenotype_derivation.R")
-```
-Produces: Trigeminal cluster assignments, quality metrics
-
-**Step 1c: Interpret & Validate Clusters**
-```r
-source("R/03_stage1_trigeminal_cluster_classification.R")
-source("R/04_stage1_trigeminal_cluster_interpretation.R")
-```
-Produces: Cluster characterization, classification models, interpretation
-
-**Stage 2: Regression & Modulator Analyses**
-
-**Step 2a: Regression Models of Psychophysical Measures**
-```r
-source("R/05_psychophysical_regression_analysis.R")
-```
-Produces: Regression models for AmmoLa intensity, CO₂ threshold, Lateralization
-
-**Step 2b: Identify Modulators of Trigeminal Sensitivity**
-```r
-source("R/06_stage2_modulator_identification_psychophysical.R")
-source("R/07_stage2_modulator_identification_clusters.R")
-```
-Produces: Modulator identification, feature importance
 
 **Note:** All scripts automatically load utilities via `globals.R`. No need to manually source `utils.R` or `ProjectionsBiomed_MainFunctions_6_1core.R`.
 

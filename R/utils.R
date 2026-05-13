@@ -563,6 +563,708 @@ text_color_fun <- function(fill_color) {
 }
 
 
+
+
+# ============================================================================
+#   § 7. PENALIZED REGRESSION MODELS
+# ============================================================================
+#   Combined framework for fitting and comparing penalized linear models
+# (ridge, lasso, and elastic net), alongside standard linear regression
+# Features:
+#   - Automatic design matrix construction (handles factor encoding)
+# - Cross-validated model tuning (lambda selection via cv.glmnet)
+# - Parallel comparison of ridge (L2), lasso (L1), and elastic net
+# - Integration of classical GLM estimates and p-values
+# - Unified coefficient table with selection indicators
+# Functions in this section:
+#   - run_penalized_regression_all() : Fit models and summarize coefficients
+# ============================================================================
+
+run_penalized_regression_all <- function(train_data,
+                                         train_target,
+                                         alpha_elastic = 0.5,
+                                         nfolds = 5,
+                                         seed = 42,
+                                         ridge_threshold = 0.05) {
+
+  cat(sprintf("Penalized Linear Regression (ridge, lasso, elastic net) ===\n"))
+  cat(sprintf("Dataset: %d features, %d samples\n",
+              ncol(train_data), nrow(train_data)))
+
+  if (ncol(train_data) == 0 || nrow(train_data) == 0) {
+    cat("No data available - skipping\n")
+    return(NULL)
+  }
+
+  ## ---------- 1. Prepare outcome and design matrix ----------
+  y <- as.numeric(train_target)
+
+  # model.matrix will create dummy variables if needed
+  X <- model.matrix(~ ., data = train_data)[, -1, drop = FALSE]  # drop intercept column
+
+  ## ---------- 2. Standard linear regression (for p values) ----------
+  lr_train_data <- train_data
+  lr_train_data$target <- y
+
+  if (ncol(train_data) == 1) {
+    formula_str <- paste("target ~", names(train_data)[1])
+  } else {
+    formula_str <- "target ~ ."
+  }
+
+  glm_fit <- glm(as.formula(formula_str), data = lr_train_data)
+
+  # Get coefficient table, including p values, as a data frame
+  glm_coef_df <- broom::tidy(glm_fit) %>%
+    dplyr::filter(term != "(Intercept)") %>%        # drop intercept
+    dplyr::select(variable = term,
+                  glm_estimate = estimate,
+                  glm_p = p.value)
+
+  ## ---------- 3. Fit penalized models ----------
+  set.seed(seed)
+
+  # Helper to fit cv.glmnet and extract coefficients at lambda.min
+  fit_penalized <- function(alpha_value) {
+    cv_fit <- cv.glmnet(
+      x = X,
+      y = y,
+      family = "gaussian",
+      alpha = alpha_value,
+      nfolds = nfolds
+    )
+
+    best_lambda <- cv_fit$lambda.min
+
+    final_model <- glmnet(
+      x = X,
+      y = y,
+      family = "gaussian",
+      alpha = alpha_value,
+      lambda = best_lambda
+    )
+
+    list(cv_fit = cv_fit,
+         model = final_model,
+         lambda = best_lambda)
+  }
+
+  ridge_res   <- fit_penalized(alpha_value = 0)
+  lasso_res   <- fit_penalized(alpha_value = 1)
+  elastic_res <- fit_penalized(alpha_value = alpha_elastic)
+
+  cat(sprintf("ridge  lambda.min = %g\n", ridge_res$lambda))
+  cat(sprintf("lasso  lambda.min = %g\n", lasso_res$lambda))
+  cat(sprintf("elastic lambda.min = %g (alpha = %.2f)\n",
+              elastic_res$lambda, alpha_elastic))
+
+  ## ---------- 4. Extract coefficient vectors ----------
+  get_coef_df <- function(res, label) {
+    cf <- as.matrix(coef(res$model))   # includes intercept
+    tibble(
+      variable = rownames(cf),
+      coef = as.numeric(cf)
+    ) %>%
+      filter(variable != "(Intercept)") %>%
+      rename_with(~ paste0(label, "_coef"), .cols = coef)
+  }
+
+  ridge_coef_df   <- get_coef_df(ridge_res,   "ridge")
+  lasso_coef_df   <- get_coef_df(lasso_res,   "lasso")
+  elastic_coef_df <- get_coef_df(elastic_res, "elastic")
+
+  ## ---------- 5. Merge all coefficients ----------
+  coef_table <- glm_coef_df %>%
+    full_join(ridge_coef_df,   by = "variable") %>%
+    full_join(lasso_coef_df,   by = "variable") %>%
+    full_join(elastic_coef_df, by = "variable")
+
+  # Make sure we have all variables that appear in X, even if dropped in glm
+  # (e.g., due to singularities)
+  all_vars <- setdiff(colnames(X), "(Intercept)")
+  coef_table <- coef_table %>%
+    right_join(tibble(variable = all_vars), by = "variable") %>%
+    arrange(variable)
+
+  ## ---------- 6. Selection indicators ----------
+  coef_table <- coef_table %>%
+    mutate(
+      ridge_selected   = if_else(!is.na(ridge_coef)   & abs(ridge_coef)   > ridge_threshold, TRUE, FALSE),
+      lasso_selected   = if_else(!is.na(lasso_coef)   & lasso_coef   != 0, TRUE, FALSE),
+      elastic_selected = if_else(!is.na(elastic_coef) & elastic_coef != 0, TRUE, FALSE)
+    )
+
+  ## ---------- 7. Print a compact table ----------
+  cat("\n=== Variable selection summary ===\n")
+  print(
+    coef_table %>%
+      dplyr::select(variable,
+                    glm_p,
+                    ridge_coef, ridge_selected,
+                    lasso_coef, lasso_selected,
+                    elastic_coef, elastic_selected)
+  )
+
+  ## ---------- 8. Return everything for further use ----------
+  invisible(list(
+    glm_fit = glm_fit,
+    ridge   = ridge_res,
+    lasso   = lasso_res,
+    elastic = elastic_res,
+    coef_table = coef_table
+  ))
+}
+
+
+run_penalized_regression_remove_colinear_all <- function(train_data,
+                                         train_target,
+                                         alpha_elastic = 0.5,
+                                         nfolds = 5,
+                                         seed = 42,
+                                         ridge_threshold = 0.05,
+                                         vif_limit = 10) {
+
+  cat(sprintf("Penalized Linear Regression (ridge, lasso, elastic net) ===\n"))
+  cat(sprintf("Dataset: %d features, %d samples\n",
+              ncol(train_data), nrow(train_data)))
+
+  if (ncol(train_data) == 0 || nrow(train_data) == 0) {
+    cat("No data available - skipping\n")
+    return(NULL)
+  }
+
+  ## ---------- 1. Prepare outcome and design matrix ----------
+  y <- as.numeric(train_target)
+
+  # model.matrix will create dummy variables if needed
+  X <- model.matrix(~ ., data = train_data)[, -1, drop = FALSE]  # drop intercept column
+
+  ## ---------- 2. Standard linear regression (for p values) with remval of colinear or aliased vars ----------
+
+
+  actual_data_base <- cbind.data.frame(
+    train_data,
+    target = y
+  )
+
+  current_data <- actual_data_base
+  i <- 0
+
+  repeat {
+    i <- i + 1
+    cat("Iteration:", i, "\n")
+
+    lm_res <- lm(target ~ ., data = current_data)
+
+    aliased_mat <- alias(lm_res)$Complete
+    aliased_vars <- character(0)
+
+    if (!is.null(aliased_mat)) {
+      aliased_vars <- rownames(aliased_mat)
+      aliased_vars <- gsub("`", "", aliased_vars)
+      aliased_vars <- intersect(aliased_vars, names(current_data))
+      cat("Aliased:", paste(aliased_vars, collapse = ", "), "\n")
+    }
+
+    if (length(aliased_vars) > 0) {
+      before <- ncol(current_data)
+      current_data <- current_data[, !names(current_data) %in% aliased_vars, drop = FALSE]
+      after <- ncol(current_data)
+
+      if (before == after) stop("Aliased terms found, but no matching columns were removed.")
+      next
+    }
+
+    vif_vals <- car::vif(lm_res)
+    if (is.matrix(vif_vals)) vif_vals <- vif_vals[, 1]
+
+    max_vif <- max(vif_vals, na.rm = TRUE)
+    cat("Max VIF:", max_vif, "\n")
+
+    if (is.finite(max_vif) && max_vif <= vif_limit) break
+
+    var_to_remove <- names(which.max(vif_vals))
+    if (length(var_to_remove) == 0 || is.na(var_to_remove)) stop("Could not identify a variable to remove.")
+
+    current_data <- current_data[, !names(current_data) %in% var_to_remove, drop = FALSE]
+  }
+
+  lr_train_data <- current_data
+
+  if (ncol(current_data) == 2) {
+    formula_str <- paste("target ~", names(current_data)[2])
+  } else {
+    formula_str <- "target ~ ."
+  }
+
+  glm_fit <- glm(as.formula(formula_str), data = lr_train_data)
+
+  # Get coefficient table, including p values, as a data frame
+  glm_coef_df <- broom::tidy(glm_fit) %>%
+    dplyr::filter(term != "(Intercept)") %>%        # drop intercept
+    dplyr::select(variable = term,
+                  glm_estimate = estimate,
+                  glm_p = p.value)
+
+  ## ---------- 3. Fit penalized models ----------
+  set.seed(seed)
+
+  # Helper to fit cv.glmnet and extract coefficients at lambda.min
+  fit_penalized <- function(alpha_value) {
+    cv_fit <- cv.glmnet(
+      x = X,
+      y = y,
+      family = "gaussian",
+      alpha = alpha_value,
+      nfolds = nfolds
+    )
+
+    best_lambda <- cv_fit$lambda.min
+
+    final_model <- glmnet(
+      x = X,
+      y = y,
+      family = "gaussian",
+      alpha = alpha_value,
+      lambda = best_lambda
+    )
+
+    list(cv_fit = cv_fit,
+         model = final_model,
+         lambda = best_lambda)
+  }
+
+  ridge_res   <- fit_penalized(alpha_value = 0)
+  lasso_res   <- fit_penalized(alpha_value = 1)
+  elastic_res <- fit_penalized(alpha_value = alpha_elastic)
+
+  cat(sprintf("ridge  lambda.min = %g\n", ridge_res$lambda))
+  cat(sprintf("lasso  lambda.min = %g\n", lasso_res$lambda))
+  cat(sprintf("elastic lambda.min = %g (alpha = %.2f)\n",
+              elastic_res$lambda, alpha_elastic))
+
+  ## ---------- 4. Extract coefficient vectors ----------
+  get_coef_df <- function(res, label) {
+    cf <- as.matrix(coef(res$model))   # includes intercept
+    tibble(
+      variable = rownames(cf),
+      coef = as.numeric(cf)
+    ) %>%
+      filter(variable != "(Intercept)") %>%
+      rename_with(~ paste0(label, "_coef"), .cols = coef)
+  }
+
+  ridge_coef_df   <- get_coef_df(ridge_res,   "ridge")
+  lasso_coef_df   <- get_coef_df(lasso_res,   "lasso")
+  elastic_coef_df <- get_coef_df(elastic_res, "elastic")
+
+  ## ---------- 5. Merge all coefficients ----------
+  coef_table <- glm_coef_df %>%
+    full_join(ridge_coef_df,   by = "variable") %>%
+    full_join(lasso_coef_df,   by = "variable") %>%
+    full_join(elastic_coef_df, by = "variable")
+
+  # Make sure we have all variables that appear in X, even if dropped in glm
+  # (e.g., due to singularities)
+  all_vars <- setdiff(colnames(X), "(Intercept)")
+  coef_table <- coef_table %>%
+    right_join(tibble(variable = all_vars), by = "variable") %>%
+    arrange(variable)
+
+  ## ---------- 6. Selection indicators ----------
+  coef_table <- coef_table %>%
+    mutate(
+      ridge_selected   = if_else(!is.na(ridge_coef)   & abs(ridge_coef)   > ridge_threshold, TRUE, FALSE),
+      lasso_selected   = if_else(!is.na(lasso_coef)   & lasso_coef   != 0, TRUE, FALSE),
+      elastic_selected = if_else(!is.na(elastic_coef) & elastic_coef != 0, TRUE, FALSE)
+    )
+
+  ## ---------- 7. Print a compact table ----------
+  cat("\n=== Variable selection summary ===\n")
+  print(
+    coef_table %>%
+      dplyr::select(variable,
+                    glm_p,
+                    ridge_coef, ridge_selected,
+                    lasso_coef, lasso_selected,
+                    elastic_coef, elastic_selected)
+  )
+
+  ## ---------- 8. Return everything for further use ----------
+  invisible(list(
+    glm_fit = glm_fit,
+    ridge   = ridge_res,
+    lasso   = lasso_res,
+    elastic = elastic_res,
+    coef_table = coef_table
+  ))
+}
+
+
+run_penalized_multinomial_all <- function(train_data,
+                                          train_target,
+                                          alpha_elastic = 0.5,
+                                          nfolds = 5,
+                                          seed = 42,
+                                          ridge_threshold = 0.05,
+                                          any_class_selection = TRUE) {
+  cat(sprintf("Penalized Multinomial Regression (ridge, lasso, elastic net) ===\n"))
+  cat(sprintf(
+    "Dataset: %d features, %d samples\n",
+    ncol(train_data), nrow(train_data)
+  ))
+
+  if (ncol(train_data) == 0 || nrow(train_data) == 0) {
+    cat("No data available - skipping\n")
+    return(NULL)
+  }
+
+  ## 1. Outcome and design matrix
+  y <- as.factor(train_target)
+  X <- model.matrix(~., data = train_data)[, -1, drop = FALSE]
+
+  ## ---------- NEW: Unpenalized multinomial model ----------
+  df_glm <- train_data
+  df_glm$target <- y
+
+  multinom_fit <- nnet::multinom(target ~ ., data = df_glm, trace = FALSE)
+
+  # Extract coefficients (matrix: classes x variables)
+  coef_mat <- coef(multinom_fit)
+
+  # Handle binary case (returns vector instead of matrix)
+  if (is.vector(coef_mat)) {
+    coef_mat <- matrix(coef_mat, nrow = 1)
+    rownames(coef_mat) <- levels(y)[2]
+  }
+
+  glm_long <- as.data.frame(coef_mat) %>%
+    tibble::rownames_to_column("class") %>%
+    tidyr::pivot_longer(-class, names_to = "variable", values_to = "glm_coef")
+
+  s <- summary(multinom_fit)
+  z_mat <- s$coefficients / s$standard.errors
+  p_mat <- (1 - pnorm(abs(z_mat), 0, 1)) * 2
+  if (is.vector(p_mat)) {
+    p_mat <- matrix(p_mat, nrow = 1)
+    rownames(p_mat) <- levels(y)[2]
+  }
+  glm_pval_long <- as.data.frame(p_mat) %>%
+    tibble::rownames_to_column("class") %>%
+    tidyr::pivot_longer(-class, names_to = "variable", values_to = "glm_pval")
+
+  ## --------------------------------------------------------
+
+  set.seed(seed)
+
+  fit_penalized_multinom <- function(alpha_value) {
+    cv_fit <- glmnet::cv.glmnet(
+      x = X,
+      y = y,
+      family = "multinomial",
+      alpha = alpha_value,
+      nfolds = nfolds
+    )
+    best_lambda <- cv_fit$lambda.min
+    final_model <- glmnet::glmnet(
+      x = X,
+      y = y,
+      family = "multinomial",
+      alpha = alpha_value,
+      lambda = best_lambda
+    )
+    list(
+      cv_fit = cv_fit,
+      model = final_model,
+      lambda = best_lambda
+    )
+  }
+
+  ridge_res <- fit_penalized_multinom(alpha_value = 0)
+  lasso_res <- fit_penalized_multinom(alpha_value = 1)
+  elastic_res <- fit_penalized_multinom(alpha_value = alpha_elastic)
+
+  cat(sprintf("ridge   lambda.min = %g\n", ridge_res$lambda))
+  cat(sprintf("lasso   lambda.min = %g\n", lasso_res$lambda))
+  cat(sprintf(
+    "elastic lambda.min = %g (alpha = %.2f)\n",
+    elastic_res$lambda, alpha_elastic
+  ))
+
+  ## Extract penalized coefficients
+  get_coef_long <- function(res, label) {
+    cf_list <- coef(res$model)
+    purrr::map_dfr(names(cf_list), function(cls) {
+      mat <- as.matrix(cf_list[[cls]])
+      tibble::tibble(
+        class    = cls,
+        variable = rownames(mat),
+        coef     = as.numeric(mat)
+      )
+    }) %>%
+      dplyr::filter(variable != "(Intercept)") %>%
+      dplyr::rename(!!paste0(label, "_coef") := coef)
+  }
+
+  ridge_long <- get_coef_long(ridge_res, "ridge")
+  lasso_long <- get_coef_long(lasso_res, "lasso")
+  elastic_long <- get_coef_long(elastic_res, "elastic")
+
+  ## ---------- UPDATED MERGE: include glm ----------
+  coef_table <- glm_long %>%
+    dplyr::full_join(glm_pval_long, by = c("variable", "class")) %>%
+    dplyr::full_join(ridge_long, by = c("variable", "class")) %>%
+    dplyr::full_join(lasso_long, by = c("variable", "class")) %>%
+    dplyr::full_join(elastic_long, by = c("variable", "class")) %>%
+    dplyr::arrange(variable, class)
+
+  ## Selection indicators
+  coef_table <- coef_table %>%
+    dplyr::mutate(
+      glm_selected     = dplyr::if_else(!is.na(glm_pval) & glm_pval < 0.05, TRUE, FALSE),
+      ridge_selected   = dplyr::if_else(!is.na(ridge_coef) & abs(ridge_coef) > ridge_threshold, TRUE, FALSE),
+      lasso_selected   = dplyr::if_else(!is.na(lasso_coef) & lasso_coef != 0, TRUE, FALSE),
+      elastic_selected = dplyr::if_else(!is.na(elastic_coef) & elastic_coef != 0, TRUE, FALSE)
+    )
+
+  cat("\n=== Variable selection summary (per class) ===\n")
+  print(
+    coef_table %>%
+      dplyr::select(
+        variable, class,
+        glm_coef, glm_selected,
+        ridge_coef, ridge_selected,
+        lasso_coef, lasso_selected,
+        elastic_coef, elastic_selected
+      )
+  )
+
+  if (any_class_selection) {
+    var_level <- coef_table %>%
+      dplyr::group_by(variable) %>%
+      dplyr::summarise(
+        ridge_selected_any = any(ridge_selected),
+        lasso_selected_any = any(lasso_selected),
+        elastic_selected_any = any(elastic_selected),
+        .groups = "drop"
+      )
+    cat("\n=== Variable-level selection (any class) ===\n")
+    print(var_level)
+  }
+
+  invisible(list(
+    multinom_fit = multinom_fit, # NEW
+    ridge = ridge_res,
+    lasso = lasso_res,
+    elastic = elastic_res,
+    coef_table = coef_table
+  ))
+}
+
+
+run_penalized_multinomial_remove_colinear_all <- function(train_data,
+                                          train_target,
+                                          alpha_elastic = 0.5,
+                                          nfolds = 5,
+                                          seed = 42,
+                                          ridge_threshold = 0.05,
+                                          any_class_selection = TRUE,
+                                          vif_limit = 10) {
+  cat(sprintf("Penalized Multinomial Regression (ridge, lasso, elastic net) ===\n"))
+  cat(sprintf(
+    "Dataset: %d features, %d samples\n",
+    ncol(train_data), nrow(train_data)
+  ))
+
+  if (ncol(train_data) == 0 || nrow(train_data) == 0) {
+    cat("No data available - skipping\n")
+    return(NULL)
+  }
+
+  ## 1. Outcome and design matrix
+  y <- as.factor(train_target)
+  X <- model.matrix(~., data = train_data)[, -1, drop = FALSE]  # full matrix for penalized models
+
+  ## ---------- 2. Remove aliased and collinear predictors (lm proxy) ----------
+  current_data <- train_data
+  i <- 0
+
+  repeat {
+    i <- i + 1
+    cat("Iteration:", i, "\n")
+
+    lm_proxy <- lm(as.numeric(y) ~ ., data = cbind.data.frame(target = as.numeric(y), current_data))
+
+    aliased_mat <- alias(lm_proxy)$Complete
+    aliased_vars <- character(0)
+
+    if (!is.null(aliased_mat)) {
+      aliased_vars <- rownames(aliased_mat)
+      aliased_vars <- gsub("`", "", aliased_vars)
+      aliased_vars <- intersect(aliased_vars, names(current_data))
+      cat("Aliased:", paste(aliased_vars, collapse = ", "), "\n")
+    }
+
+    if (length(aliased_vars) > 0) {
+      before <- ncol(current_data)
+      current_data <- current_data[, !names(current_data) %in% aliased_vars, drop = FALSE]
+      after <- ncol(current_data)
+      if (before == after) stop("Aliased terms found, but no matching columns were removed.")
+      next
+    }
+
+    vif_vals <- car::vif(lm_proxy)
+    if (is.matrix(vif_vals)) vif_vals <- vif_vals[, 1]
+
+    max_vif <- max(vif_vals, na.rm = TRUE)
+    cat("Max VIF:", max_vif, "\n")
+
+    if (is.finite(max_vif) && max_vif <= vif_limit) break
+
+    var_to_remove <- names(which.max(vif_vals))
+    if (length(var_to_remove) == 0 || is.na(var_to_remove)) stop("Could not identify a variable to remove.")
+
+    current_data <- current_data[, !names(current_data) %in% var_to_remove, drop = FALSE]
+  }
+
+  ## ---------- 3. Unpenalized multinomial on collinearity-cleaned data ----------
+  df_glm <- current_data
+  df_glm$target <- y
+
+  multinom_fit <- nnet::multinom(target ~ ., data = df_glm, trace = FALSE)
+
+  # Extract coefficients (matrix: classes x variables)
+  coef_mat <- coef(multinom_fit)
+
+  # Handle binary case (returns vector instead of matrix)
+  if (is.vector(coef_mat)) {
+    coef_mat <- matrix(coef_mat, nrow = 1)
+    rownames(coef_mat) <- levels(y)[2]
+  }
+
+  glm_long <- as.data.frame(coef_mat) %>%
+    tibble::rownames_to_column("class") %>%
+    tidyr::pivot_longer(-class, names_to = "variable", values_to = "glm_coef")
+
+  s <- summary(multinom_fit)
+  z_mat <- s$coefficients / s$standard.errors
+  p_mat <- (1 - pnorm(abs(z_mat), 0, 1)) * 2
+  if (is.vector(p_mat)) {
+    p_mat <- matrix(p_mat, nrow = 1)
+    rownames(p_mat) <- levels(y)[2]
+  }
+  glm_pval_long <- as.data.frame(p_mat) %>%
+    tibble::rownames_to_column("class") %>%
+    tidyr::pivot_longer(-class, names_to = "variable", values_to = "glm_pval")
+
+  ## --------------------------------------------------------
+
+  set.seed(seed)
+
+  fit_penalized_multinom <- function(alpha_value) {
+    cv_fit <- glmnet::cv.glmnet(
+      x = X,
+      y = y,
+      family = "multinomial",
+      alpha = alpha_value,
+      nfolds = nfolds
+    )
+    best_lambda <- cv_fit$lambda.min
+    final_model <- glmnet::glmnet(
+      x = X,
+      y = y,
+      family = "multinomial",
+      alpha = alpha_value,
+      lambda = best_lambda
+    )
+    list(
+      cv_fit = cv_fit,
+      model = final_model,
+      lambda = best_lambda
+    )
+  }
+
+  ridge_res <- fit_penalized_multinom(alpha_value = 0)
+  lasso_res <- fit_penalized_multinom(alpha_value = 1)
+  elastic_res <- fit_penalized_multinom(alpha_value = alpha_elastic)
+
+  cat(sprintf("ridge   lambda.min = %g\n", ridge_res$lambda))
+  cat(sprintf("lasso   lambda.min = %g\n", lasso_res$lambda))
+  cat(sprintf(
+    "elastic lambda.min = %g (alpha = %.2f)\n",
+    elastic_res$lambda, alpha_elastic
+  ))
+
+  ## Extract penalized coefficients
+  get_coef_long <- function(res, label) {
+    cf_list <- coef(res$model)
+    purrr::map_dfr(names(cf_list), function(cls) {
+      mat <- as.matrix(cf_list[[cls]])
+      tibble::tibble(
+        class    = cls,
+        variable = rownames(mat),
+        coef     = as.numeric(mat)
+      )
+    }) %>%
+      dplyr::filter(variable != "(Intercept)") %>%
+      dplyr::rename(!!paste0(label, "_coef") := coef)
+  }
+
+  ridge_long <- get_coef_long(ridge_res, "ridge")
+  lasso_long <- get_coef_long(lasso_res, "lasso")
+  elastic_long <- get_coef_long(elastic_res, "elastic")
+
+  ## ---------- UPDATED MERGE: include glm ----------
+  coef_table <- glm_long %>%
+    dplyr::full_join(glm_pval_long, by = c("variable", "class")) %>%
+    dplyr::full_join(ridge_long, by = c("variable", "class")) %>%
+    dplyr::full_join(lasso_long, by = c("variable", "class")) %>%
+    dplyr::full_join(elastic_long, by = c("variable", "class")) %>%
+    dplyr::arrange(variable, class)
+
+  ## Selection indicators
+  coef_table <- coef_table %>%
+    dplyr::mutate(
+      glm_selected     = dplyr::if_else(!is.na(glm_pval) & glm_pval < 0.05, TRUE, FALSE),
+      ridge_selected   = dplyr::if_else(!is.na(ridge_coef) & abs(ridge_coef) > ridge_threshold, TRUE, FALSE),
+      lasso_selected   = dplyr::if_else(!is.na(lasso_coef) & lasso_coef != 0, TRUE, FALSE),
+      elastic_selected = dplyr::if_else(!is.na(elastic_coef) & elastic_coef != 0, TRUE, FALSE)
+    )
+
+  cat("\n=== Variable selection summary (per class) ===\n")
+  print(
+    coef_table %>%
+      dplyr::select(
+        variable, class,
+        glm_coef, glm_selected,
+        ridge_coef, ridge_selected,
+        lasso_coef, lasso_selected,
+        elastic_coef, elastic_selected
+      )
+  )
+
+  if (any_class_selection) {
+    var_level <- coef_table %>%
+      dplyr::group_by(variable) %>%
+      dplyr::summarise(
+        ridge_selected_any = any(ridge_selected),
+        lasso_selected_any = any(lasso_selected),
+        elastic_selected_any = any(elastic_selected),
+        .groups = "drop"
+      )
+    cat("\n=== Variable-level selection (any class) ===\n")
+    print(var_level)
+  }
+
+  invisible(list(
+    multinom_fit = multinom_fit,
+    ridge = ridge_res,
+    lasso = lasso_res,
+    elastic = elastic_res,
+    coef_table = coef_table
+  ))
+}
+
 ################################################################################
 # END OF UTILS.R
 ################################################################################
