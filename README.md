@@ -286,11 +286,9 @@ Alternative clustering solution; not included in manuscript but available for me
 - **Method:** Tukey's ladder of powers (λ = -2, -1, -0.5, 0, 0.5, 1, 2) with Box-Cox reference; D'Agostino's K² normality test
 - **AmmoLa intensity** (left-skewed, ceiling effects): Reflected sign-preserving log transformation
   - Formula: $-\text{sign}(\max(\text{AmmoLa})+1-\text{AmmoLa}) \cdot \log_{10}(|\max(\text{AmmoLa})+1-\text{AmmoLa}|+1)$
-  - Rescaled to [0, 3]
 - **CO₂ threshold** (right-skewed; lower = higher sensitivity): Sign-inverted log transformation  
   - Formula: $-\text{sign}(\text{CO}_2) \times \log_{10}(|\text{CO}_2|+1)$
-  - Rescaled to [0, 3]
-- **Lateralization** (approximately normal): Retained untransformed; rescaled to [0, 3]
+- **Lateralization** (approximately normal): Retained untransformed
 
 ### Dataset Split & Imputation
 - **Split before imputation** (critical): Training (80%, n=800) and validation (20%, n=201) sets created first
