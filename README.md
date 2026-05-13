@@ -287,7 +287,7 @@ Alternative clustering solution; not included in manuscript but available for me
 - **AmmoLa intensity** (left-skewed, ceiling effects): Reflected sign-preserving log transformation
   - Formula: $-\text{sign}(\max(\text{AmmoLa})+1-\text{AmmoLa}) \cdot \log_{10}(|\max(\text{AmmoLa})+1-\text{AmmoLa}|+1)$
 - **CO₂ threshold** (right-skewed; lower = higher sensitivity): Sign-inverted log transformation  
-  - Formula: $-\text{sign}(\text{CO}_2) \times \log_{10}(|\text{CO}_2|+1)$
+  - Formula: $-\text{sign}(\text{CO}_2)\times\log_{10}(|\text{CO}_2|+1)$
 - **Lateralization** (approximately normal): Retained untransformed
 
 ### Dataset Split & Imputation
