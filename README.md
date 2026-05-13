@@ -285,16 +285,9 @@ Alternative clustering solution; not included in manuscript but available for me
 ### Distribution Assessment & Transformations
 - **Method:** Tukey's ladder of powers (λ = -2, -1, -0.5, 0, 0.5, 1, 2) with Box-Cox reference; D'Agostino's K² normality test
 - **AmmoLa intensity** (left-skewed, ceiling effects): Reflected sign-preserving log transformation
-  - Formula: 
-```math
-- \operatorname{sign}\bigl(\max(\mathrm{AmmoLa}) + 1 - \mathrm{AmmoLa}\bigr)
-\cdot \log_{10}\bigl(\lvert \max(\mathrm{AmmoLa}) + 1 - \mathrm{AmmoLa}\rvert + 1\bigr)
-```
+  - Formula: $-\text{sign}(\max(\text{AmmoLa})+1-\text{AmmoLa}) \cdot \log_{10}(|\max(\text{AmmoLa})+1-\text{AmmoLa}|+1)$
 - **CO₂ threshold** (right-skewed; lower = higher sensitivity): Sign-inverted log transformation  
-  - Formula: 
-```math
-- \operatorname{sign}(\mathrm{CO}_2) \times \log_{10}\bigl(\lvert \mathrm{CO}_2\rvert + 1\bigr)
-```
+  - Formula: $-\text{sign}(\text{CO}_2)\times\log_{10}(|\text{CO}_2|+1)$
 - **Lateralization** (approximately normal): Retained untransformed
 
 ### Dataset Split & Imputation
