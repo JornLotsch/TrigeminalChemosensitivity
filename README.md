@@ -1,6 +1,6 @@
 # Trigeminal Chemosensitivity Analysis
 
-Computational pipeline for characterizing trigeminal sensitivity phenotypes and identifying their modulatory factors. This repository accompanies a peer-reviewed scientific manuscript describing a two-stage analysis: (1) characterization of the trigeminal data space and derivation of a composite trigeminal phenotype via unsupervised clustering, and (2) identification of modulators of both the phenotype and three psychophysical measures (AmmoLa intensity, CO₂ threshold, Lateralization).
+Computational pipeline for characterizing trigeminal sensitivity phenotypes and identifying their modulatory factors. This repository accompanies a peer-reviewed scientific manuscript describing a three-stage analysis: (1) preliminary characterization of psychophysical measures in non-imputed data, (2) exploratory characterization of the trigeminal data space and candidate modulators in the complete imputed dataset, and (3) predictive machine learning framework for derivation of a composite trigeminal phenotype and identification of modulators.
 
 **Development environment:** R 4.5.3 and 4.6 for Linux
 
@@ -12,15 +12,22 @@ Computational pipeline for characterizing trigeminal sensitivity phenotypes and 
 1. **Internal trigeminal data structure**: 21 variables (3 psychophysical measures + 18 TriFunQ items)
 2. **External modulatory factors**: 220 non-trigeminal candidate predictors (demographic, medical, lifestyle, olfactory)
 
-**Two-part workflow:**
+**Three-stage workflow:**
 
-**Part 1: Exploratory Analysis (Complete Imputed Dataset, n=1,001)**
+**Stage 1: Preliminary Characterization (Non-imputed Observed Data, n=1,001)**
+- Characterization of trigeminal sensitivity in the full sample without imputation
+- Fisher's exact tests for associations between high-sensitivity classifications across psychophysical measures
+- Spearman rank correlations among the three psychophysical measures
+- Kruskal-Wallis tests for sex differences with effect sizes (η²)
+- *Files:* [read_data_and_basic_corrections.R](R/read_data_and_basic_corrections.R)
+
+**Stage 2: Exploratory Analysis (Complete Imputed Dataset, n=1,001)**
 - Correlation analysis and PCA of trigeminal variables
 - Regression screening of 220 candidate modulators against 3 psychophysical measures
 - Descriptive, hypothesis-generating; no held-out validation
 - *Files:* [01_stage1_trigeminal_data_space_exploration.R](R/01_stage1_trigeminal_data_space_exploration.R)
 
-**Part 2: Machine Learning Framework (Train/Validation Split, 80%/20%)**
+**Stage 3: Machine Learning Framework (Train/Validation Split, 80%/20%)**
 - All model development confined to training set (n=800)
 - Derivation of composite trigeminal phenotype via unsupervised clustering
 - Supervised models: Predict psychophysical measures and cluster membership
@@ -166,7 +173,23 @@ See manuscript Methods for full technical details.
 
 ---
 
-### PART 1: Exploratory Analysis (Complete Imputed Dataset, n=1,001)
+### STAGE 1: Preliminary Characterization of Psychophysical Trigeminal Measures in Observed Data
+
+**Objective:** Characterize trigeminal sensitivity in the full cohort without imputation and examine associations between high-sensitivity classifications across psychophysical measures.
+
+**Files:** [read_data_and_basic_corrections.R](R/read_data_and_basic_corrections.R)
+
+**Rationale:** Because AmmoLa intensity was the only psychophysical measure obtained in the entire cohort, it provided the only opportunity to characterize trigeminal sensitivity in the full sample without imputation. High trigeminal sensitivity was operationalized using scale-inherent thresholds rather than derived from the observed distribution: for AmmoLa and lateralization (where higher values indicate higher sensitivity), ratings at or above the 90th percentile (≥90) of the 0 to 100 rating scale, corresponding to the top 10% of possible scores. For CO₂ thresholds, where shorter detection durations indicate higher sensitivity, the analogous threshold was the bottom 10% of the scale (≤10th percentile).
+
+**Analyses:**
+- **Fisher's exact tests:** To assess whether participants classified as highly sensitive on one measure showed enrichment for high sensitivity on others, Fisher's exact tests were applied to 2×2 contingency tables crossing high-sensitivity classifications across pairs of psychophysical measures, with odds ratios and 95% confidence intervals quantifying the strength of association.
+- **Spearman rank correlations:** Calculated among the three psychophysical measures in the observed non-imputed data to characterize their mutual independence without reliance on imputed values (1,001 pairs; 95% CI via bootstrapping)
+- **Sex differences:** Assessed using Kruskal-Wallis tests with η² effect sizes and 95% bootstrap confidence intervals
+- **Data:** All analyses performed on observed, non-imputed data (n=1,001)
+
+---
+
+### STAGE 2: Exploratory Analysis (Complete Imputed Dataset, n=1,001)
 
 **Objective:** Characterize internal trigeminal data structure and screen for candidate modulators using hypothesis-generating methods without held-out validation.
 
@@ -182,7 +205,7 @@ See manuscript Methods for full technical details.
 
 ---
 
-### PART 2: Machine Learning Framework (Train/Validation Split: n=800 training, n=201 validation)
+### STAGE 3: Machine Learning Framework (Train/Validation Split: n=800 training, n=201 validation)
 
 **Objective:** Derive composite trigeminal phenotype via unsupervised clustering (training set only) and evaluate supervised predictive models on independent validation data.
 
@@ -326,9 +349,20 @@ source("R/build_analysis_dataset.R")
 
 ---
 
-### PART 1: Exploratory Analysis (Complete Imputed Dataset, n=1,001)
+### STAGE 1: Preliminary Characterization (Non-imputed Observed Data)
 
-This part is hypothesis-generating and descriptive; uses merged training + validation data.
+This stage characterizes trigeminal sensitivity in the full sample without imputation.
+
+```r
+source("R/read_data_and_basic_corrections.R")
+```
+**Output:** Fisher's exact tests, Spearman correlations, Kruskal-Wallis tests, sex differences
+
+---
+
+### STAGE 2: Exploratory Analysis (Complete Imputed Dataset, n=1,001)
+
+This stage is hypothesis-generating and descriptive; uses merged training + validation data.
 
 ```r
 source("R/01_stage1_trigeminal_data_space_exploration.R")
@@ -337,30 +371,30 @@ source("R/01_stage1_trigeminal_data_space_exploration.R")
 
 ---
 
-### PART 2: Machine Learning Framework (Train/Validation Split)
+### STAGE 3: Machine Learning Framework (Train/Validation Split)
 
 All model development confined to training set; validation on held-out data.
 
-#### Step 2a: Derive Composite Trigeminal Phenotype
+#### Step 3a: Derive Composite Trigeminal Phenotype
 ```r
 source("R/02_stage1_trigeminal_clustering_phenotype_derivation.R")
 ```
 **Output:** Trigeminal cluster assignments (training set → validated on held-out), quality metrics
 
-#### Step 2b: Supervised Cluster Classification
+#### Step 3b: Supervised Cluster Classification
 ```r
 source("R/03_stage1_trigeminal_cluster_classification.R")
 source("R/04_stage1_trigeminal_cluster_interpretation.R")
 ```
 **Output:** Classification models, cluster characterization, psychometric interpretation
 
-#### Step 2c: Regression Models of Psychophysical Measures (trigeminal → psychophysical)
+#### Step 3c: Regression Models of Psychophysical Measures (trigeminal → psychophysical)
 ```r
 source("R/05_psychophysical_regression_analysis.R")
 ```
 **Output:** Regression models predicting AmmoLa, CO₂ threshold, Lateralization from trigeminal variables
 
-#### Step 2d: Modulator Identification (external candidates → psychophysical & clusters)
+#### Step 3d: Modulator Identification (external candidates → psychophysical & clusters)
 ```r
 source("R/06_stage2_modulator_identification_psychophysical.R")
 source("R/07_stage2_modulator_identification_clusters.R")
