@@ -262,7 +262,7 @@ cat("\nAmmoLa vs Lateralization agreement (breath hold):\n")
 print(ftest_AmmoLa_vs_lateralization_most_sensitive)
 
 # ========================================================================== #
-# CONFUSION MATRIX ANALYSIS
+# CONFUSION MATRIX ANALYSIS - TOP 10% SENSITIVITY
 # ========================================================================== #
 
 cat("\nGenerating confusion matrix analysis...\n")
@@ -384,6 +384,98 @@ p_table_AmmoLa_vs_lateralization_most_sensitive <- ggplot(
 
 print(p_table_AmmoLa_vs_lateralization_most_sensitive)
 
+
+# ========================================================================== #
+# GROUP AGREEMENT ANALYSIS - LOWER 15% SENSITIVITY
+# ========================================================================== #
+
+cat("\nAnalyzing agreement among least sensitive subjects...\n")
+
+# Create binary grouping: less sensitive 15% vs others
+trigeminal_measures_data_grouped_l15 <- trigeminal_measures_data_scaled
+
+# For AmmoLa and Lateralization: bottom 15% = most sensitive
+trigeminal_measures_data_grouped_l15[, 1:2] <- apply(
+  trigeminal_measures_data_grouped_l15[, 1:2],
+  2,
+  function(x) ifelse(x < 15, 1, 0)
+)
+
+# For CO2: lower threshold = more sensitive (inverted scale)
+trigeminal_measures_data_grouped_l15$CO2_threshold <- ifelse(
+  trigeminal_measures_data_grouped_l15$CO2_threshold > 85, 1, 0
+)
+
+# Summary of sensitivity thresholding
+cat("\nDistribution of most sensitive subjects:\n")
+print(apply(trigeminal_measures_data_grouped_l15[, 1:3], 2, table))
+
+# --- Agreement analysis for ALL subjects ---
+trigeminal_measures_data_grouped_all_l15 <- trigeminal_measures_data_grouped_l15
+
+# # Fisher's exact test: AmmoLa vs Lateralization
+# cat("\nFisher's test: AmmoLa vs Lateralization (all subjects)\n")
+# fisher_test_result_lat_l15 <- fisher.test(
+#   trigeminal_measures_data_grouped_all_l15$AmmoLa_intensity,
+#   trigeminal_measures_data_grouped_all_l15$Lateralization
+# )
+# print(fisher_test_result_lat_l15)
+# print(table(
+#   trigeminal_measures_data_grouped_all_l15$AmmoLa_intensity,
+#   trigeminal_measures_data_grouped_all_l15$Lateralization
+# ))
+
+# Fisher's exact test: AmmoLa vs CO2
+cat("\nFisher's test: AmmoLa vs CO2 (all subjects)\n")
+fisher_test_result_CO2_l15 <- fisher.test(
+  trigeminal_measures_data_grouped_all_l15$AmmoLa_intensity,
+  trigeminal_measures_data_grouped_all_l15$CO2_threshold
+)
+print(fisher_test_result_CO2_l15)
+print(table(
+  trigeminal_measures_data_grouped_all_l15$AmmoLa_intensity,
+  trigeminal_measures_data_grouped_all_l15$CO2_threshold
+))
+
+# --- Agreement analysis ONLY for breath hold subjects ---
+trigeminal_measures_data_grouped_breath_hold_l15 <- trigeminal_measures_data_grouped_all_l15
+
+# Exclude CO2 data from breath-not-controlled group
+trigeminal_measures_data_grouped_breath_hold_l15$CO2_threshold[1:549] <- NA
+
+# # Fisher's tests for breath hold group only
+# cat("\nFisher's test: AmmoLa vs Lateralization (breath hold only)\n")
+# fisher_test_lat_breath_hold <- fisher.test(table(
+#   trigeminal_measures_data_grouped_breath_hold_l15$AmmoLa_intensity,
+#   trigeminal_measures_data_grouped_breath_hold_l15$Lateralization
+# ))
+# print(fisher_test_lat_breath_hold)
+#
+# cat("\nFisher's test: AmmoLa vs CO2 (breath hold only)\n")
+# fisher_test_CO2_breath_hold <- fisher.test(table(
+#   trigeminal_measures_data_grouped_breath_hold_l15$AmmoLa_intensity,
+#   trigeminal_measures_data_grouped_breath_hold_l15$CO2_threshold
+# ))
+# print(fisher_test_CO2_breath_hold)
+
+# Store tables and test results for visualization
+table_AmmoLa_vs_CO2_most_sensitive_l15 <- table(
+  trigeminal_measures_data_grouped_breath_hold_l15[, c(1, 3)]
+)
+ftest_AmmoLa_vs_CO2_most_sensitive_l15 <- fisher.test(table_AmmoLa_vs_CO2_most_sensitive_l15)
+cat("\nAmmoLa vs CO2 agreement (breath hold):\n")
+print(ftest_AmmoLa_vs_CO2_most_sensitive_l15)
+
+# table_AmmoLa_vs_lateralization_most_sensitive_l15 <- table(
+#   trigeminal_measures_data_grouped_breath_hold_l15[, c(1, 2)]
+# )
+# ftest_AmmoLa_vs_lateralization_most_sensitive_l15 <- fisher.test(
+#   table_AmmoLa_vs_lateralization_most_sensitive_l15
+# )
+# cat("\nAmmoLa vs Lateralization agreement (breath hold):\n")
+# print(ftest_AmmoLa_vs_lateralization_most_sensitive_l15)
+
+
 # ========================================================================== #
 # VARIABLE TRANSFORMATION AND ALTERNATIVE GMM BASED GROUPING ANALYSIS
 # ========================================================================== #
@@ -396,20 +488,20 @@ print(min(trigeminal_measures_data$AmmoLa_intensity))
 # ========================================================================== #
 # Method: Tukey's ladder of powers (λ = -2, -1, -0.5, 0, 0.5, 1, 2)
 #         with Box-Cox reference; D'Agostino's K² normality test
-# 
+#
 # AmmoLa intensity (left-skewed, ceiling effects):
 #   - Transformation: Reflected sign-preserving log (Norris 2004; Feng 2014)
 #   - Formula: -sign(max+1-x) * log10(|max+1-x|+1)
 #   - Rationale: Handles ceiling at 90 by reflection; log stabilizes variance
-# 
+#
 # CO₂ threshold (right-skewed; lower threshold = higher sensitivity):
 #   - Transformation: Sign-inverted log (sign-flip important for interpretation)
 #   - Formula: -sign(threshold) * log10(|threshold|+1)
 #   - Rationale: Inversion makes higher values = higher sensitivity; log handles skew
-# 
+#
 # Lateralization: Approximately normal (D'Agostino K² p > 0.05)
 #   - Retained untransformed; only rescaled to [0,3]
-# 
+#
 # See README.md "Data Processing" > "Distribution Assessment & Transformations"
 # ========================================================================== #
 
