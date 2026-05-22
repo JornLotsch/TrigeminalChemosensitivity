@@ -2194,6 +2194,105 @@ ggsave("combined_TriFunQ_PCA_plot.png", combined_TriFunQ_PCA_plot, width = 18, h
 
 
 # ========================================================================== #
+# FACTOR ANALYSIS OF ALL TRIGEMINAL MEASURES
+# ========================================================================== #
+heat_matrix_all_corr <- heat_matrix_all
+heat_matrix_all_corr[["How often do you cut fresh onions per month?"]] <- 3*scaleRange_01(-heat_matrix_all_corr[["How often do you cut fresh onions per month?"]])
+
+par(mfrow=c(6,4))
+apply(heat_matrix_all_corr,2,plot)
+par(mfrow=c(1,1))
+
+heat_matrix_all_scaled <- as.data.frame(scale(heat_matrix_all_corr))
+
+
+fa_eigenvalues <- eigen(cor(heat_matrix_all_scaled))
+scree(heat_matrix_all_scaled, pc=FALSE)
+fa.parallel(heat_matrix_all_scaled, fa="fa")
+
+# --- 6-factor solution (ML, promax) as reference --------------------------
+Nfacs <- 6
+
+fa_fit <- factanal(heat_matrix_all_scaled, Nfacs, rotation="promax",  scores = "Bartlett")
+print(fa_fit, digits=2, cutoff=0.3, sort=TRUE)
+
+fa_loadings_2d <- fa_fit$loadings[,1:2]
+plot(fa_loadings_2d, type="n")
+text(fa_loadings_2d, labels=names(heat_matrix_all_scaled), cex=.7)
+
+fa_loadings <- fa_fit$loadings
+fa.diagram(fa_loadings)
+
+# --- Principal axis factoring (PA): robust to Heywood cases ---------------
+# 6-factor PA solution
+fa_fit_pa6 <- psych::fa(heat_matrix_all_scaled, nfactors = 6,
+                         fm = "pa", rotate = "oblimin")
+print(fa_fit_pa6, digits = 2, cut = 0.3, sort = TRUE)
+fa.diagram(fa_fit_pa6)
+
+# 2-factor PA solution: tests Sensitivity vs. Avoidance hypothesis
+fa_fit_pa2 <- psych::fa(heat_matrix_all_scaled, nfactors = 2,
+                         fm = "pa", rotate = "oblimin")
+print(fa_fit_pa2, digits = 2, cut = 0.3, sort = TRUE)
+fa.diagram(fa_fit_pa2)
+
+# Save coordinates for later cluster interpretation
+write.csv(fa_fit_pa2$scores, "FA_PA_coordinates.csv")
+
+fa_fit_pa2
+
+# Loading plot for 2-factor PA solution
+fa_loadings_df <- as.data.frame(fa_fit_pa2$loadings[, 1:2])
+colnames(fa_loadings_df) <- c("PA1_Hypersensitivity", "PA2_OcularSensitivity")
+fa_loadings_df$item <- rownames(fa_loadings_df)
+
+# Categorize items for color
+fa_loadings_df$group <- dplyr::case_when(
+  fa_loadings_df$PA1_Hypersensitivity >= 0.30  ~ "Trigeminal hypersensitivity",
+  fa_loadings_df$PA2_OcularSensitivity >= 0.30  ~ "Ocular chemosensitivity",
+  TRUE                                           ~ "No clear loading"
+)
+
+fa_loadings_df$item <- stringr::str_wrap(fa_loadings_df$item, width = 35)
+
+fa_plot <- ggplot(fa_loadings_df, aes(x = PA1_Hypersensitivity, y = PA2_OcularSensitivity,
+                           color = group, label = item)) +
+  geom_point(size = 3) +
+  ggrepel::geom_text_repel(size = 3, max.overlaps = 20) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey60") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey60") +
+  geom_vline(xintercept = 0.30, linetype = "dotted", color = "grey40") +
+  geom_hline(yintercept = 0.30, linetype = "dotted", color = "grey40") +
+  scale_color_manual(values = c("Trigeminal hypersensitivity" = "#E64B35",
+                                "Ocular chemosensitivity"     = "#4DBBD5",
+                                "No clear loading"            = "grey50")) +
+  labs(x = "PA1 – Trigeminal chemical hypersensitivity",
+       y = "PA2 – Ocular chemosensitivity",
+       color = NULL, title = "Factor analysis of trigeminal variables") +
+  theme_bw(base_size = 11) +
+  theme(legend.position = "bottom")
+
+print(fa_plot)
+
+######################### Save Plot ######################################################
+
+
+message("Saving plot...")
+ggsave(filename =  "fa_plot.svg",
+  fa_plot,
+  width = 12,
+  height = 12,
+  dpi = 300
+)
+ggsave(filename =  "fa_plot.png",
+       fa_plot,
+       width = 12,
+       height = 12,
+       dpi = 300
+)
+
+
+# ========================================================================== #
 # REGRESSION ANALYSIS OF ALL MODULATORS TO PSYCHOPHYSICAL MEASURES
 # ========================================================================== #
 

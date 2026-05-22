@@ -81,6 +81,7 @@ Performed on observed, non-imputed data:
 Performed on the complete imputed dataset obtained by merging the independently imputed training and validation subsets:
 - Correlation analysis of 21 trigeminal variables comprising 3 psychophysical measures and 18 TriFunQ items
 - Principal component analysis
+- Factor analysis for questionaire item grouping
 - Variable-importance ranking
 - Exploratory screening of 220 candidate modulators against psychophysical measures
 

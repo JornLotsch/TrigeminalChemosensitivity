@@ -816,5 +816,52 @@ tab_filteredone_feature_classification
 
 
 # ============================================================================ #
+# 13. INTERPREST CLUSTERS BASED ON FACTOR ANALYIS
+# ============================================================================ #
+
+# Load coordinates for later cluster interpretation
+FA_coordinates <- read.csv("FA_PA_coordinates.csv", row.names = 1)
+FA_coordinates$ID <- rownames(FA_coordinates)
+
+FA_coordinates_training <- merge(
+  FA_coordinates,
+  trig_clusters_training_data[, c("ID", "Cluster")],
+  by = "ID"
+)
+
+FA_coordinates_training$ID <- NULL
+
+FA_coordinates_training_means <- FA_coordinates_training %>%
+  group_by(Cluster) %>%
+  summarise(
+    mean_col1 = mean(PA1, na.rm = TRUE),
+    mean_col2 = mean(PA2, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+
+FA_coordinates_validation <- merge(
+  FA_coordinates,
+  trig_clusters_validation_data[, c("ID", "Cluster")],
+  by = "ID"
+)
+
+FA_coordinates_validation$ID <- NULL
+
+FA_coordinates_validation_means <- FA_coordinates_validation %>%
+  group_by(Cluster) %>%
+  summarise(
+    mean_col1 = mean(PA1, na.rm = TRUE),
+    mean_col2 = mean(PA2, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+
+print(FA_coordinates_training_means)
+print(FA_coordinates_validation_means)
+
+
+
+# ============================================================================ #
 # END OF SCRIPT
 # ============================================================================ #
