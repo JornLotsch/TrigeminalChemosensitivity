@@ -153,16 +153,14 @@ clusters_trig_modulators_sig_predictors_interpretation <- read.csv(
 # ------------------------------------------------------------------------------
 clusters_trig_modulators_sig_predictors_interpretation_1 <-
   clusters_trig_modulators_sig_predictors_interpretation %>%
-
   # Keep clusters 1–4 only
   filter(class %in% 1:4) %>%
-
   # Aggregate selection flags per variable
   group_by(variable) %>%
   summarise(
-    glm_selected     = any(glm_selected, na.rm = TRUE),
-    ridge_selected   = any(ridge_selected, na.rm = TRUE),
-    lasso_selected   = any(lasso_selected, na.rm = TRUE),
+    glm_selected = any(glm_selected, na.rm = TRUE),
+    ridge_selected = any(ridge_selected, na.rm = TRUE),
+    lasso_selected = any(lasso_selected, na.rm = TRUE),
     elastic_selected = any(elastic_selected, na.rm = TRUE),
 
     # Mark Boruta as confirmed if selected in any cluster
@@ -171,10 +169,8 @@ clusters_trig_modulators_sig_predictors_interpretation_1 <-
     } else {
       "Rejected"
     },
-
     .groups = "drop"
   ) %>%
-
   # Keep variables selected by at least one method
   filter(
     glm_selected | ridge_selected | lasso_selected |
@@ -184,11 +180,11 @@ clusters_trig_modulators_sig_predictors_interpretation_1 <-
 # ------------------------------------------------------------------------------
 # Count number of selected features per method
 # ------------------------------------------------------------------------------
-n_features_glm     <- sum(clusters_trig_modulators_sig_predictors_interpretation_1$glm_selected, na.rm = TRUE)
-n_features_ridge   <- sum(clusters_trig_modulators_sig_predictors_interpretation_1$ridge_selected, na.rm = TRUE)
-n_features_lasso   <- sum(clusters_trig_modulators_sig_predictors_interpretation_1$lasso_selected, na.rm = TRUE)
+n_features_glm <- sum(clusters_trig_modulators_sig_predictors_interpretation_1$glm_selected, na.rm = TRUE)
+n_features_ridge <- sum(clusters_trig_modulators_sig_predictors_interpretation_1$ridge_selected, na.rm = TRUE)
+n_features_lasso <- sum(clusters_trig_modulators_sig_predictors_interpretation_1$lasso_selected, na.rm = TRUE)
 n_features_elastic <- sum(clusters_trig_modulators_sig_predictors_interpretation_1$elastic_selected, na.rm = TRUE)
-n_features_RF      <- sum(clusters_trig_modulators_sig_predictors_interpretation_1$Boruta == "Confirmed", na.rm = TRUE)
+n_features_RF <- sum(clusters_trig_modulators_sig_predictors_interpretation_1$Boruta == "Confirmed", na.rm = TRUE)
 
 # Extract Boruta-confirmed features
 Boruta_features <- clusters_trig_modulators_sig_predictors_interpretation_1$variable[
@@ -201,10 +197,9 @@ cat("\\nGenerating confusion matrix analysis...\\n")
 # Generate confusion matrix plots for selected categorical variables
 # ------------------------------------------------------------------------------
 cv_plots <- lapply(c("Gender_m", "turbinate.surgery"), function(actual_feature) {
-
   # Prepare dataset with feature and cluster labels
   df_cm_cvms_clus <- data.frame(
-    Gender  = trig_train_final[actual_feature],
+    Gender = trig_train_final[actual_feature],
     Cluster = trig_train_final$Cluster,
     check.names = FALSE
   )
@@ -249,7 +244,7 @@ cv_plots <- lapply(c("Gender_m", "turbinate.surgery"), function(actual_feature) 
     ggplot2::geom_text(ggplot2::aes(label = Freq), size = 5) +
     ggplot2::scale_fill_gradient(low = "lightcyan", high = "steelblue") +
     ggplot2::labs(
-      title    = paste0(actual_feature, " vs Cluster"),
+      title = paste0(actual_feature, " vs Cluster"),
       subtitle = paste0("Fisher's exact test p-value: ", fisher_p_clus),
       x = "Cluster",
       y = actual_feature,
@@ -282,10 +277,9 @@ Boruta_gradual_features <- make.names(c(
 ))
 
 gradual_var_exploration <- lapply(Boruta_gradual_features, function(actual_feature) {
-
   # Prepare dataset
   df_cm_cvms_clus <- data.frame(
-    Gender  = trig_train_final[actual_feature],
+    Gender = trig_train_final[actual_feature],
     Cluster = trig_train_final$Cluster,
     check.names = FALSE
   )

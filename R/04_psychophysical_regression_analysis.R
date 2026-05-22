@@ -40,8 +40,20 @@
 #   - NLS for prediction assessment; ANOVA for model comparison
 ################################################################################
 
-# ============================================================================ #\n# PART 2: MACHINE LEARNING FRAMEWORK — Psychophysical Regression
-# ============================================================================ #\n# Regression analyses predicting each psychophysical outcome from remaining\n# trigeminal variables (20 predictors per outcome).\n#\n# Model Development: Training set only (n=800)\n# Validation: Independent held-out set (n=201)\n#\n# Regression Methods: OLS, Ridge, Lasso, Elastic Net (α=0.5), Random Forest\n# Hyperparameter Tuning: 5-fold cross-validation for λ; grid search for RF\n# Performance Assessment: Nonlinear LS (predicted vs. observed) on validation set\n#\n# See README.md \"PART 2\" > \"Prediction of psychophysical measures (from trigeminal variables)\"\n# and manuscript Methods for full technical details\n# ============================================================================ #
+# ============================================================================ #\n
+# PART 2: MACHINE LEARNING FRAMEWORK — Psychophysical Regression
+# ============================================================================ #\n
+
+# Regression analyses predicting each psychophysical outcome from remaining
+# trigeminal variables (20 predictors per outcome).\n
+# Model Development: Training set only (n=800)
+# Validation: Independent held-out set (n=201)
+# Regression Methods: OLS, Ridge, Lasso, Elastic Net (α=0.5), 
+# Random Forest\n# Hyperparameter Tuning: 5-fold cross-validation for λ; grid search for RF
+# Performance Assessment: Nonlinear LS (predicted vs. observed) on validation set
+# See README.md \"PART 2\" > \"Prediction of psychophysical measures (from trigeminal variables)
+# and manuscript Methods for full technical details
+# ============================================================================ #
 
 # ============================================================================ #
 # 1. LOAD REQUIRED LIBRARIES

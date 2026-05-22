@@ -50,17 +50,17 @@
 # ============================================================================ #
 # Regression analyses linking 220 non-trigeminal candidate modulators
 # (demographics, medical, lifestyle, olfactory) to three psychophysical outcomes.
-# 
+#
 # Model Development: Training set only (n=800)
 # Validation: Independent held-out set (n=201)
-# 
+#
 # Feature Selection: Boruta algorithm (RF-based importance)
 # Regression Methods: OLS, Ridge, Lasso, Elastic Net (α=0.5), Random Forest
 # Hyperparameter Tuning: 5-fold cross-validation for λ; grid search for RF
-# 
+#
 # Post-hoc Characterization: Confirmed modulators assessed with Wilcoxon/Spearman
 # Cross-dataset Validation: Effect size concordance via Kendall's τ
-# 
+#
 # See README.md "PART 2" > "Prediction of psychophysical measures from candidate modulators"
 # and manuscript Methods for full technical details
 # ============================================================================ #
@@ -107,7 +107,8 @@ prepare_boruta_plot_data <- function(boruta_res, decision_col = "Boruta.res") {
       "Tentative",
       ifelse(
         imp_long$Feature %in% decisions$Feature[decisions$Decision %in% c("Rejected")],
-        "Rejected", "Shadow")
+        "Rejected", "Shadow"
+      )
     )
   )
 
@@ -140,7 +141,7 @@ get_selected_vars_mod <- function(fit_type, coef_table, ref_data) {
   if (fit_type == "glm_fit") {
     mm_vars <- unique(coef_table$variable[!is.na(coef_table$glm_p) & coef_table$glm_p < 0.05])
   } else {
-    col     <- switch(fit_type,
+    col <- switch(fit_type,
       "elastic" = "elastic_selected",
       "lasso"   = "lasso_selected",
       "ridge"   = "ridge_selected"
@@ -151,23 +152,27 @@ get_selected_vars_mod <- function(fit_type, coef_table, ref_data) {
   # Map model.matrix column names back to original data column names
   names(ref_data)[
     names(ref_data) %in% mm_vars |
-    make.names(names(ref_data)) %in% make.names(mm_vars)
+      make.names(names(ref_data)) %in% make.names(mm_vars)
   ]
 }
 
 retrain_glm <- function(train_data, train_target) {
-  lr_data        <- train_data
+  lr_data <- train_data
   lr_data$target <- as.numeric(train_target)
   formula_str <- if (ncol(train_data) == 1) paste("target ~", names(train_data)[1]) else "target ~ ."
   glm(as.formula(formula_str), data = lr_data)
 }
 
 retrain_penalized_linear <- function(fit_type, train_data, train_target, nfolds = 5, seed = 42) {
-  alpha_val   <- switch(fit_type, "elastic" = 0.5, "lasso" = 1, "ridge" = 0)
-  y           <- as.numeric(train_target)
-  X           <- model.matrix(~ ., data = train_data)[, -1, drop = FALSE]
+  alpha_val <- switch(fit_type,
+    "elastic" = 0.5,
+    "lasso" = 1,
+    "ridge" = 0
+  )
+  y <- as.numeric(train_target)
+  X <- model.matrix(~., data = train_data)[, -1, drop = FALSE]
   set.seed(seed)
-  cv_fit      <- glmnet::cv.glmnet(x = X, y = y, family = "gaussian", alpha = alpha_val, nfolds = nfolds)
+  cv_fit <- glmnet::cv.glmnet(x = X, y = y, family = "gaussian", alpha = alpha_val, nfolds = nfolds)
   final_model <- glmnet::glmnet(x = X, y = y, family = "gaussian", alpha = alpha_val, lambda = cv_fit$lambda.min)
   list(model = final_model, lambda = cv_fit$lambda.min)
 }
@@ -180,13 +185,16 @@ cat("\n=== Loading Data ===\n")
 
 # Load training data (imputed)
 trigeminale_training_data <- read.csv("analysis_dataset_training_imputed.csv",
-                                      check.names = FALSE)
+  check.names = FALSE
+)
 cat("Training data loaded:", nrow(trigeminale_training_data), "samples\n")
 
 # Extract variables for regression
-variables_for_fs_imputed <- trigeminale_training_data[,!names(trigeminale_training_data) %in% c(variables_by_categories$Nasal_chemosensory_perception,
-                                                                                                variables_by_categories$Psychophysical_measurements[c(1, 2, 4)], "ID")]
-targets_for_fs_imputed <- trigeminale_training_data[,variables_by_categories$Psychophysical_measurements[c(1, 2, 4)]]
+variables_for_fs_imputed <- trigeminale_training_data[, !names(trigeminale_training_data) %in% c(
+  variables_by_categories$Nasal_chemosensory_perception,
+  variables_by_categories$Psychophysical_measurements[c(1, 2, 4)], "ID"
+)]
+targets_for_fs_imputed <- trigeminale_training_data[, variables_by_categories$Psychophysical_measurements[c(1, 2, 4)]]
 
 rownames(variables_for_fs_imputed) <- trigeminale_training_data$ID
 rownames(targets_for_fs_imputed) <- trigeminale_training_data$ID
@@ -195,13 +203,16 @@ names(variables_for_fs_imputed) <- make.names(names(variables_for_fs_imputed))
 
 # Load validation data (imputed)
 trigeminale_validation_data <- read.csv("analysis_dataset_validation_imputed.csv",
-                                        check.names = FALSE)
+  check.names = FALSE
+)
 cat("Validation data loaded:", nrow(trigeminale_validation_data), "samples\n")
 
 # Extract variables for regression (validation)
-variables_for_fs_imputed_validation <- trigeminale_validation_data[,!names(trigeminale_validation_data) %in% c(variables_by_categories$Nasal_chemosensory_perception,
-                                                                                                variables_by_categories$Psychophysical_measurements[c(1, 2, 4)], "ID")]
-targets_for_fs_imputed_validation <- trigeminale_validation_data[,variables_by_categories$Psychophysical_measurements[c(1, 2, 4)]]
+variables_for_fs_imputed_validation <- trigeminale_validation_data[, !names(trigeminale_validation_data) %in% c(
+  variables_by_categories$Nasal_chemosensory_perception,
+  variables_by_categories$Psychophysical_measurements[c(1, 2, 4)], "ID"
+)]
+targets_for_fs_imputed_validation <- trigeminale_validation_data[, variables_by_categories$Psychophysical_measurements[c(1, 2, 4)]]
 
 rownames(variables_for_fs_imputed_validation) <- trigeminale_validation_data$ID
 rownames(targets_for_fs_imputed_validation) <- trigeminale_validation_data$ID
@@ -248,11 +259,11 @@ print(names(targets_for_fs_imputed))
 # ============================================================================ #
 
 reg_modulators_resultat <- pbmcapply::pbmclapply(c("Lateralization (x/20)", "AmmoLa intensity", "CO2 threshold"), function(reg_target_varname) {
-  actual_data <-  variables_for_fs_imputed
+  actual_data <- variables_for_fs_imputed
   set.seed(42)
 
   # Quick tune RF for REGRESSION
-  mtry_values <- unique(round(c(2, ncol(actual_data) / 3, ncol(actual_data) / 2, sqrt(ncol(actual_data)), log2(ncol(actual_data)), ncol(actual_data))))  # regression default is ncol/3, not sqrt
+  mtry_values <- unique(round(c(2, ncol(actual_data) / 3, ncol(actual_data) / 2, sqrt(ncol(actual_data)), log2(ncol(actual_data)), ncol(actual_data)))) # regression default is ncol/3, not sqrt
   ntree_values <- c(100, 200, 500, 1000)
   grid <- expand.grid(mtry = mtry_values, ntree = ntree_values)
   grid$median_mse <- NA
@@ -267,22 +278,24 @@ reg_modulators_resultat <- pbmcapply::pbmclapply(c("Lateralization (x/20)", "Amm
         mtry = grid$mtry[i],
         ntree = grid$ntree[i]
       )
-      mses_matrix[i, run] <- model$mse[length(model$mse)]  # final OOB MSE
+      mses_matrix[i, run] <- model$mse[length(model$mse)] # final OOB MSE
     }
   }
 
   grid$median_mse <- apply(mses_matrix, 1, median)
   best <- grid[which.min(grid$median_mse), ]
 
-  Boruta_res <- Boruta::Boruta(x = actual_data,
-                               y = targets_for_fs_imputed[[reg_target_varname]], ntree = best[["ntree"]], mtry = best[["mtry"]], maxRuns = 1000, doTrace = TRUE)
+  Boruta_res <- Boruta::Boruta(
+    x = actual_data,
+    y = targets_for_fs_imputed[[reg_target_varname]], ntree = best[["ntree"]], mtry = best[["mtry"]], maxRuns = 1000, doTrace = TRUE
+  )
 
   penalized_regression_res <- run_penalized_regression_remove_colinear_all(
-    train_data   = actual_data,
+    train_data = actual_data,
     train_target = targets_for_fs_imputed[[reg_target_varname]],
     alpha_elastic = 0.5,
     nfolds = 5,
-    ridge_threshold = 0.05  # or something small that makes sense in your scale
+    ridge_threshold = 0.05 # or something small that makes sense in your scale
   )
   return(list(Boruta_res = Boruta_res, rf_best_params = best, penalized_regression_res = penalized_regression_res))
 }, mc.cores = nProc_desired)
@@ -293,11 +306,11 @@ names(reg_modulators_resultat) <- c("Lateralization (x/20)", "AmmoLa intensity",
 # 7. INITIAL RESULT INSPECTION
 # ============================================================================ #
 
-par(mfrow=c(2,3))
+par(mfrow = c(2, 3))
 plot(reg_modulators_resultat[[1]]$Boruta_res, las = 2)
 plot(reg_modulators_resultat[[2]]$Boruta_res, las = 2)
 plot(reg_modulators_resultat[[3]]$Boruta_res, las = 2)
-par(mfrow=c(1,1))
+par(mfrow = c(1, 1))
 
 print(reg_modulators_resultat[["Lateralization (x/20)"]]$penalized_regression_res)
 print(reg_modulators_resultat[["AmmoLa intensity"]]$penalized_regression_res)
@@ -329,8 +342,8 @@ reg_modulators_predictions <- lapply(c("all", "reduced"), function(feature_set) 
           )
         }
       } else {
-        sel_vars  <- get_selected_vars_mod(fit_type, ct, variables_for_fs_imputed)
-        val_data  <- variables_for_fs_imputed_validation[, sel_vars, drop = FALSE]
+        sel_vars <- get_selected_vars_mod(fit_type, ct, variables_for_fs_imputed)
+        val_data <- variables_for_fs_imputed_validation[, sel_vars, drop = FALSE]
         train_sub <- variables_for_fs_imputed[, sel_vars, drop = FALSE]
         if (fit_type == "glm_fit") {
           model <- retrain_glm(train_sub, targets_for_fs_imputed[[reg_target_varname]])
@@ -341,14 +354,14 @@ reg_modulators_predictions <- lapply(c("all", "reduced"), function(feature_set) 
         }
       }
 
-      y_obs         <- targets_for_fs_imputed_validation[[reg_target_varname]]
-      nls_pred      <- nls(y_new ~ const + slope * y_obs, start = list(const = median(y_new), slope = 1))
+      y_obs <- targets_for_fs_imputed_validation[[reg_target_varname]]
+      nls_pred <- nls(y_new ~ const + slope * y_obs, start = list(const = median(y_new), slope = 1))
       nls_pred_null <- nls(y_new ~ const + 0 * y_obs, start = list(const = median(y_new)))
 
-      var_anaylsis  <- anova(nls_pred, nls_pred_null)
-      full_model    <- summary(nls_pred)
+      var_anaylsis <- anova(nls_pred, nls_pred_null)
+      full_model <- summary(nls_pred)
       reduced_model <- summary(nls_pred_null)
-      df_pred       <- cbind.data.frame(y_new, y_obs)
+      df_pred <- cbind.data.frame(y_new, y_obs)
 
       p <- ggplot(df_pred, aes(x = y_obs, y = y_new)) +
         geom_point(color = actual_palette[4]) +
@@ -362,8 +375,10 @@ reg_modulators_predictions <- lapply(c("all", "reduced"), function(feature_set) 
         theme_plot() +
         labs(title = paste0("Prediction of ", reg_target_varname, ": Model = ", fit_type))
 
-      return(list(var_anaylsis = var_anaylsis, full_model = full_model, reduced_model = reduced_model,
-                  df_pred = df_pred, pred_plot = p))
+      return(list(
+        var_anaylsis = var_anaylsis, full_model = full_model, reduced_model = reduced_model,
+        df_pred = df_pred, pred_plot = p
+      ))
     })
     names(fits) <- c("glm_fit", "elastic", "lasso", "ridge")
     fits
@@ -383,12 +398,13 @@ for (v in vars_to_update) {
   reg_modulators_resultat[[v]]$penalized_regression_res$coef_table <-
     reg_modulators_resultat[[v]]$penalized_regression_res$coef_table %>%
     mutate(variable = variable %>%
-             str_replace_all("`", "") %>%
-             str_squish()) %>%
+      str_replace_all("`", "") %>%
+      str_squish()) %>%
     left_join(
       enframe(reg_modulators_resultat[[v]]$Boruta_res$finalDecision,
-              name = "variable",
-              value = "Boruta") %>%
+        name = "variable",
+        value = "Boruta"
+      ) %>%
         mutate(variable = str_squish(variable)),
       by = "variable"
     )
@@ -418,7 +434,7 @@ p_ammoLa_Boruta <- ggplot(Boruta_data$importance, aes(x = reorder(Feature, media
     axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 8),
     legend.position = c(.1, .8),
     legend.background = element_rect(fill = ggplot2::alpha("white", 0.5)),
-    legend.key       = element_rect(fill = ggplot2::alpha("white", 0.5))
+    legend.key = element_rect(fill = ggplot2::alpha("white", 0.5))
   ) +
   scale_color_manual(
     values = c("Chosen" = "chartreuse4", "Tentative" = "gold", "Rejected" = "salmon", "Shadow" = "grey50")
@@ -429,9 +445,11 @@ p_ammoLa_Boruta <- ggplot(Boruta_data$importance, aes(x = reorder(Feature, media
 
 print(p_ammoLa_Boruta)
 ggsave("p_ammoLa_Boruta.svg", p_ammoLa_Boruta,
-       width = 25, height = 8, dpi = 300, limitsize = FALSE)
+  width = 25, height = 8, dpi = 300, limitsize = FALSE
+)
 ggsave("p_ammoLa_Boruta.png", p_ammoLa_Boruta,
-       width = 25, height = 8, dpi = 300, limitsize = FALSE)
+  width = 25, height = 8, dpi = 300, limitsize = FALSE
+)
 
 
 # ============================================================================ #
@@ -441,7 +459,7 @@ ggsave("p_ammoLa_Boruta.png", p_ammoLa_Boruta,
 # With all features
 
 rf_modulators_predictions <- lapply(c("Lateralization (x/20)", "AmmoLa intensity", "CO2 threshold"), function(reg_target_varname) {
-  actual_data <-  variables_for_fs_imputed
+  actual_data <- variables_for_fs_imputed
   set.seed(42)
 
   rf_model <- randomForest(
@@ -454,10 +472,10 @@ rf_modulators_predictions <- lapply(c("Lateralization (x/20)", "AmmoLa intensity
   y_new <- predict(rf_model, newdata = variables_for_fs_imputed_validation)
 
   y_obs <- targets_for_fs_imputed_validation[[reg_target_varname]]
-  nls_pred <- nls(y_new ~ const + slope*y_obs, start = list(const = median(y_new), slope = 1))
-  nls_pred_null  <- nls(y_new ~ const + 0 * y_obs, start = list(const = median(y_new)))
+  nls_pred <- nls(y_new ~ const + slope * y_obs, start = list(const = median(y_new), slope = 1))
+  nls_pred_null <- nls(y_new ~ const + 0 * y_obs, start = list(const = median(y_new)))
 
-  var_anaylsis <- anova(nls_pred,nls_pred_null)
+  var_anaylsis <- anova(nls_pred, nls_pred_null)
   full_model <- summary(nls_pred)
   reduced_model <- summary(nls_pred_null)
 
@@ -465,12 +483,15 @@ rf_modulators_predictions <- lapply(c("Lateralization (x/20)", "AmmoLa intensity
 
   p <- ggplot(df_pred, aes(x = y_obs, y = y_new)) +
     geom_point(color = actual_palette[4]) +
-    geom_smooth(method=lm , color="red", se=TRUE) +
-    stat_poly_eq(formula = y ~ x,
-                 aes(label = paste(after_stat(eq.label),
-                                   after_stat(rr.label),
-                                   sep = "~~~")),
-                 parse = TRUE) +
+    geom_smooth(method = lm, color = "red", se = TRUE) +
+    stat_poly_eq(
+      formula = y ~ x,
+      aes(label = paste(after_stat(eq.label),
+        after_stat(rr.label),
+        sep = "~~~"
+      )),
+      parse = TRUE
+    ) +
     geom_hline(yintercept = median(df_pred$y_new), linetype = "dashed", color = "grey60") +
     theme_plot() +
     labs(title = paste0("Prediction of ", reg_target_varname, ": Model = ", "RF"))
@@ -483,14 +504,16 @@ names(rf_modulators_predictions) <- c("Lateralization (x/20)", "AmmoLa intensity
 
 # With selected features only
 rf_modulators_predictions_selected_features <- lapply(c("Lateralization (x/20)", "AmmoLa intensity", "CO2 threshold"), function(reg_target_varname) {
-  actual_data <-  variables_for_fs_imputed[
+  actual_data <- variables_for_fs_imputed[
     names(reg_modulators_resultat[[reg_target_varname]]$Boruta_res$finalDecision[
-      reg_modulators_resultat[[reg_target_varname]]$Boruta_res$finalDecision == "Confirmed"])]
+      reg_modulators_resultat[[reg_target_varname]]$Boruta_res$finalDecision == "Confirmed"
+    ])
+  ]
 
   set.seed(42)
 
   # Quick tune RF for REGRESSION
-  mtry_values <- unique(round(c(2, ncol(actual_data) / 3, ncol(actual_data) / 2, sqrt(ncol(actual_data)), log2(ncol(actual_data)), ncol(actual_data))))  # regression default is ncol/3, not sqrt
+  mtry_values <- unique(round(c(2, ncol(actual_data) / 3, ncol(actual_data) / 2, sqrt(ncol(actual_data)), log2(ncol(actual_data)), ncol(actual_data)))) # regression default is ncol/3, not sqrt
   ntree_values <- c(100, 200, 500, 1000)
   grid <- expand.grid(mtry = mtry_values, ntree = ntree_values)
   grid$median_mse <- NA
@@ -505,7 +528,7 @@ rf_modulators_predictions_selected_features <- lapply(c("Lateralization (x/20)",
         mtry = grid$mtry[i],
         ntree = grid$ntree[i]
       )
-      mses_matrix[i, run] <- model$mse[length(model$mse)]  # final OOB MSE
+      mses_matrix[i, run] <- model$mse[length(model$mse)] # final OOB MSE
     }
   }
 
@@ -524,10 +547,10 @@ rf_modulators_predictions_selected_features <- lapply(c("Lateralization (x/20)",
   y_new <- predict(rf_model, newdata = variables_for_fs_imputed_validation)
 
   y_obs <- targets_for_fs_imputed_validation[[reg_target_varname]]
-  nls_pred <- nls(y_new ~ const + slope*y_obs, start = list(const = median(y_new), slope = 1))
-  nls_pred_null  <- nls(y_new ~ const + 0 * y_obs, start = list(const = median(y_new)))
+  nls_pred <- nls(y_new ~ const + slope * y_obs, start = list(const = median(y_new), slope = 1))
+  nls_pred_null <- nls(y_new ~ const + 0 * y_obs, start = list(const = median(y_new)))
 
-  var_anaylsis <- anova(nls_pred,nls_pred_null)
+  var_anaylsis <- anova(nls_pred, nls_pred_null)
   full_model <- summary(nls_pred)
   reduced_model <- summary(nls_pred_null)
 
@@ -535,12 +558,15 @@ rf_modulators_predictions_selected_features <- lapply(c("Lateralization (x/20)",
 
   p <- ggplot(df_pred, aes(x = y_obs, y = y_new)) +
     geom_point(color = actual_palette[4]) +
-    geom_smooth(method=lm , color="red", se=TRUE) +
-    stat_poly_eq(formula = y ~ x,
-                 aes(label = paste(after_stat(eq.label),
-                                   after_stat(rr.label),
-                                   sep = "~~~")),
-                 parse = TRUE) +
+    geom_smooth(method = lm, color = "red", se = TRUE) +
+    stat_poly_eq(
+      formula = y ~ x,
+      aes(label = paste(after_stat(eq.label),
+        after_stat(rr.label),
+        sep = "~~~"
+      )),
+      parse = TRUE
+    ) +
     geom_hline(yintercept = median(df_pred$y_new), linetype = "dashed", color = "grey60") +
     theme_plot() +
     labs(title = paste0("Prediction of ", reg_target_varname, ": Model = ", "RF"))
@@ -567,19 +593,25 @@ plot_list_reg_modulators_psy <- lapply(
 )
 # Add title above (cowplot style)
 combined_plots_reg_modulators_psy <-
-  cowplot::plot_grid(cowplot::plot_grid(
-    ggplot() +
-      labs(title = "Prediction of psychophysical trigeminal measures from candidate modulators of trigeminal sensitivity",
-           subtitle = "Predicted versus measured using standard linear regression on new data") +
-      theme(plot.title = element_text(size = 25, face = "plain", margin = ggplot2::margin(b = 4)),
-            plot.subtitle = element_text(size = 20, face = "plain", margin = ggplot2::margin(b = 1))) +
-      theme_void()
-  ),
-  plot_grid(
-    plotlist = plot_list_reg_modulators_psy,
-    nrow = 1),
-  ncol = 1,
-  rel_heights = c(0.1, 1)
+  cowplot::plot_grid(
+    cowplot::plot_grid(
+      ggplot() +
+        labs(
+          title = "Prediction of psychophysical trigeminal measures from candidate modulators of trigeminal sensitivity",
+          subtitle = "Predicted versus measured using standard linear regression on new data"
+        ) +
+        theme(
+          plot.title = element_text(size = 25, face = "plain", margin = ggplot2::margin(b = 4)),
+          plot.subtitle = element_text(size = 20, face = "plain", margin = ggplot2::margin(b = 1))
+        ) +
+        theme_void()
+    ),
+    plot_grid(
+      plotlist = plot_list_reg_modulators_psy,
+      nrow = 1
+    ),
+    ncol = 1,
+    rel_heights = c(0.1, 1)
   )
 
 print(combined_plots_reg_modulators_psy)
@@ -590,28 +622,32 @@ penal_types <- c("glm_fit", "elastic", "lasso", "ridge")
 
 # Build the long-format summary table
 make_validation_table_modulators <- function() {
-  outcomes   <- c("Lateralization (x/20)", "AmmoLa intensity", "CO2 threshold")
+  outcomes <- c("Lateralization (x/20)", "AmmoLa intensity", "CO2 threshold")
   reg_models <- c("glm_fit", "elastic", "lasso", "ridge")
 
   rows <- lapply(c("all", "reduced"), function(fs) {
     lapply(outcomes, function(outcome) {
       reg_rows <- lapply(reg_models, function(model) {
-        res     <- reg_modulators_predictions[[fs]][[outcome]][[model]]
+        res <- reg_modulators_predictions[[fs]][[outcome]][[model]]
         anova_f <- round(res$var_anaylsis$F[2], 3)
         anova_p <- signif(res$var_anaylsis$`Pr(>F)`[2], 3)
-        slope   <- round(res$full_model$coefficients["slope", "Estimate"], 3)
+        slope <- round(res$full_model$coefficients["slope", "Estimate"], 3)
         slope_p <- signif(res$full_model$coefficients["slope", "Pr(>|t|)"], 3)
-        data.frame(Feature_set = fs, Outcome = outcome, Model = model,
-                   ANOVA_F = anova_f, ANOVA_p = anova_p, Slope = slope, Slope_p = slope_p)
+        data.frame(
+          Feature_set = fs, Outcome = outcome, Model = model,
+          ANOVA_F = anova_f, ANOVA_p = anova_p, Slope = slope, Slope_p = slope_p
+        )
       })
 
-      rf_res  <- if (fs == "all") rf_modulators_predictions[[outcome]] else rf_modulators_predictions_selected_features[[outcome]]
+      rf_res <- if (fs == "all") rf_modulators_predictions[[outcome]] else rf_modulators_predictions_selected_features[[outcome]]
       anova_f <- round(rf_res$var_anaylsis$F[2], 3)
       anova_p <- signif(rf_res$var_anaylsis$`Pr(>F)`[2], 3)
-      slope   <- round(rf_res$full_model$coefficients["slope", "Estimate"], 3)
+      slope <- round(rf_res$full_model$coefficients["slope", "Estimate"], 3)
       slope_p <- signif(rf_res$full_model$coefficients["slope", "Pr(>|t|)"], 3)
-      rf_row  <- data.frame(Feature_set = fs, Outcome = outcome, Model = "RF",
-                            ANOVA_F = anova_f, ANOVA_p = anova_p, Slope = slope, Slope_p = slope_p)
+      rf_row <- data.frame(
+        Feature_set = fs, Outcome = outcome, Model = "RF",
+        ANOVA_F = anova_f, ANOVA_p = anova_p, Slope = slope, Slope_p = slope_p
+      )
 
       do.call(rbind, c(reg_rows, list(rf_row)))
     })
@@ -660,9 +696,9 @@ coef_tables_combined <- dplyr::bind_rows(
 
 sig_outcome <- validation_table_modulators[
   validation_table_modulators$Feature_set == "All features" &
-  validation_table_modulators$ANOVA_p < 0.05 &
-  validation_table_modulators$Slope_p  < 0.05 &
-  validation_table_modulators$Slope    > 0,
+    validation_table_modulators$ANOVA_p < 0.05 &
+    validation_table_modulators$Slope_p < 0.05 &
+    validation_table_modulators$Slope > 0,
   c("Outcome", "Model")
 ]
 # Reverse the outcome recode so names match coef_tables_combined
@@ -685,13 +721,13 @@ filtered_rows <- coef_tables_combined %>%
   )
 
 filtered_rows$Boruta <- ifelse(filtered_rows$Boruta == "Confirmed", TRUE, FALSE)
-filtered_rows[,1:2]
+filtered_rows[, 1:2]
 
 # Statistical tests for confirmed modulators (Wilcoxon for binary, Spearman for continuous)
 unique_pairs <- unique(filtered_rows[, c("outcome", "variable")])
 
 stats_results <- lapply(seq_len(nrow(unique_pairs)), function(i) {
-  outcome_name  <- unique_pairs$outcome[i]
+  outcome_name <- unique_pairs$outcome[i]
   variable_name <- unique_pairs$variable[i]
 
   y <- targets_for_fs_imputed[[outcome_name]]
@@ -702,27 +738,31 @@ stats_results <- lapply(seq_len(nrow(unique_pairs)), function(i) {
   if (n_unique <= 2) {
     test <- wilcox.test(y ~ x, exact = FALSE)
     data.frame(
-      outcome   = outcome_name,
-      variable  = variable_name,
-      test      = "Wilcoxon",
+      outcome = outcome_name,
+      variable = variable_name,
+      test = "Wilcoxon",
       statistic = unname(test$statistic),
-      p_value   = test$p.value,
-      signif = symnum(test$p.value, corr = FALSE, na = FALSE,
-                      cutpoints = c(0, 0.001, 0.01, 0.05, 0.1, 1),
-                      symbols   = c("***", "**", "*", ".", "")),
+      p_value = test$p.value,
+      signif = symnum(test$p.value,
+        corr = FALSE, na = FALSE,
+        cutpoints = c(0, 0.001, 0.01, 0.05, 0.1, 1),
+        symbols = c("***", "**", "*", ".", "")
+      ),
       effsize = rank_biserial_val(y = y, x = x)
     )
   } else {
     test <- cor.test(y, x, method = "spearman", exact = FALSE)
     data.frame(
-      outcome   = outcome_name,
-      variable  = variable_name,
-      test      = "Spearman",
+      outcome = outcome_name,
+      variable = variable_name,
+      test = "Spearman",
       statistic = unname(test$estimate),
-      p_value   = test$p.value,
-      signif = symnum(test$p.value, corr = FALSE, na = FALSE,
-                      cutpoints = c(0, 0.001, 0.01, 0.05, 0.1, 1),
-                      symbols   = c("***", "**", "*", ".", "")),
+      p_value = test$p.value,
+      signif = symnum(test$p.value,
+        corr = FALSE, na = FALSE,
+        cutpoints = c(0, 0.001, 0.01, 0.05, 0.1, 1),
+        symbols = c("***", "**", "*", ".", "")
+      ),
       effsize = unname(test$estimate)
     )
   }
@@ -733,7 +773,7 @@ print(stats_results_df)
 
 
 stats_results_validation <- lapply(seq_len(nrow(unique_pairs)), function(i) {
-  outcome_name  <- unique_pairs$outcome[i]
+  outcome_name <- unique_pairs$outcome[i]
   variable_name <- unique_pairs$variable[i]
 
   y <- targets_for_fs_imputed_validation[[outcome_name]]
@@ -743,29 +783,34 @@ stats_results_validation <- lapply(seq_len(nrow(unique_pairs)), function(i) {
 
   if (n_unique <= 2) {
     if (n_unique == 2) {
-    test <- wilcox.test(y ~ x, exact = FALSE)
-    data.frame(
-      outcome   = outcome_name,
-      variable  = variable_name,
-      test      = "Wilcoxon",
-      statistic = unname(test$statistic),
-      p_value   = test$p.value,
-      signif = symnum(test$p.value, corr = FALSE, na = FALSE,
-                      cutpoints = c(0, 0.001, 0.01, 0.05, 0.1, 1),
-                      symbols   = c("***", "**", "*", ".", "")),
-      effsize = rank_biserial_val(y = y, x = x)
-    ) }
+      test <- wilcox.test(y ~ x, exact = FALSE)
+      data.frame(
+        outcome = outcome_name,
+        variable = variable_name,
+        test = "Wilcoxon",
+        statistic = unname(test$statistic),
+        p_value = test$p.value,
+        signif = symnum(test$p.value,
+          corr = FALSE, na = FALSE,
+          cutpoints = c(0, 0.001, 0.01, 0.05, 0.1, 1),
+          symbols = c("***", "**", "*", ".", "")
+        ),
+        effsize = rank_biserial_val(y = y, x = x)
+      )
+    }
   } else {
     test <- cor.test(y, x, method = "spearman", exact = FALSE)
     data.frame(
-      outcome   = outcome_name,
-      variable  = variable_name,
-      test      = "Spearman",
+      outcome = outcome_name,
+      variable = variable_name,
+      test = "Spearman",
       statistic = unname(test$estimate),
-      p_value   = test$p.value,
-      signif = symnum(test$p.value, corr = FALSE, na = FALSE,
-                      cutpoints = c(0, 0.001, 0.01, 0.05, 0.1, 1),
-                      symbols   = c("***", "**", "*", ".", "")),
+      p_value = test$p.value,
+      signif = symnum(test$p.value,
+        corr = FALSE, na = FALSE,
+        cutpoints = c(0, 0.001, 0.01, 0.05, 0.1, 1),
+        symbols = c("***", "**", "*", ".", "")
+      ),
       effsize = unname(test$estimate)
     )
   }
@@ -774,8 +819,10 @@ stats_results_validation <- lapply(seq_len(nrow(unique_pairs)), function(i) {
 stats_results_validation_df <- dplyr::bind_rows(stats_results_validation)
 print(stats_results_validation_df)
 
-stats_results_all <- rbind.data.frame(cbind.data.frame(Data = "Training", stats_results_df),
-                                      cbind.data.frame(Data = "Validation", stats_results_validation_df))
+stats_results_all <- rbind.data.frame(
+  cbind.data.frame(Data = "Training", stats_results_df),
+  cbind.data.frame(Data = "Validation", stats_results_validation_df)
+)
 
 joined_df <- stats_results_df %>%
   left_join(
@@ -788,7 +835,7 @@ joined_df$mean_effect <- rowMeans(joined_df[, c("effsize_validation", "effsize_t
 
 cor.test(joined_df$effsize_validation, joined_df$effsize_train, method = "kendall")
 
-joined_df_not1 <- joined_df[abs(joined_df$mean_effect) < 0.99,]
+joined_df_not1 <- joined_df[abs(joined_df$mean_effect) < 0.99, ]
 cor.test(joined_df_not1$effsize_validation, joined_df_not1$effsize_train, method = "kendall")
 
 
@@ -802,8 +849,6 @@ p_modulator_cor_Effsizes_tau <-
   theme_plot()
 
 
-
-
 # ============================================================================ #
 # 12. SEX DIFFERENCES STATISTICS # FOR PURE EXPLORATION
 # ============================================================================ #
@@ -815,7 +860,7 @@ p_modulator_cor_Effsizes_tau <-
 res_sex_training <- lapply(targets_for_fs_imputed, function(col) {
   wilcox.test(col ~ as.factor(variables_for_fs_imputed$Gender_w))
 })
-res_sex_validation<- lapply(targets_for_fs_imputed_validation, function(col) {
+res_sex_validation <- lapply(targets_for_fs_imputed_validation, function(col) {
   wilcox.test(col ~ as.factor(variables_for_fs_imputed_validation$Gender_w))
 })
 
@@ -836,9 +881,11 @@ cat("Saved: regression_modulators_coef_tables_combined.csv\n")
 cat("Saved: regression_modulators_final_table_modulators.csv\n")
 
 ggsave("combined_plots_reg_modulators_psy.svg", combined_plots_reg_modulators_psy,
-       width = 15, height = 6, dpi = 300, limitsize = FALSE)
+  width = 15, height = 6, dpi = 300, limitsize = FALSE
+)
 ggsave("combined_plots_reg_modulators_psy.png", combined_plots_reg_modulators_psy,
-       width = 15, height = 6, dpi = 300, limitsize = FALSE)
+  width = 15, height = 6, dpi = 300, limitsize = FALSE
+)
 
 
 # ============================================================================ #

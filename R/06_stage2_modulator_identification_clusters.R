@@ -31,18 +31,18 @@
 # ============================================================================ #
 # Classification analyses linking 220 non-trigeminal candidate modulators
 # (demographics, medical, lifestyle, olfactory) to trigeminal cluster membership.
-# 
+#
 # Model Development: Training set only (n=800)
 # Validation: Independent held-out set (n=201)
-# 
+#
 # Feature Selection: Boruta algorithm (RF-based importance)
 # Classification Methods: Multinomial logistic, Ridge, Lasso, Elastic Net, Random Forest
 # Hyperparameter Tuning: 5-fold cross-validation for λ; grid search for RF
 # Performance Metric: Balanced accuracy with 95% bootstrap CI
-# 
+#
 # Post-hoc Characterization: Selected variables assessed with Wilcoxon/Spearman
 # Cross-dataset Validation: Effect size concordance via Kendall's τ
-# 
+#
 # See README.md "PART 2" > "Prediction of cluster membership from candidate modulators"
 # and manuscript Methods for full technical details
 # ============================================================================ #
@@ -129,7 +129,7 @@ get_selected_vars_reg <- function(fit_type, coef_table, ref_data) {
   mm_vars <- trimws(gsub("`", "", mm_vars))
   names(ref_data)[
     names(ref_data) %in% mm_vars |
-    make.names(names(ref_data)) %in% make.names(mm_vars)
+      make.names(names(ref_data)) %in% make.names(mm_vars)
   ]
 }
 
@@ -140,11 +140,15 @@ retrain_multinom <- function(train_data, train_target) {
 }
 
 retrain_penalized_multinom <- function(fit_type, train_data, train_target, nfolds = 5, seed = 42) {
-  alpha_val <- switch(fit_type, "elastic" = 0.5, "lasso" = 1, "ridge" = 0)
+  alpha_val <- switch(fit_type,
+    "elastic" = 0.5,
+    "lasso" = 1,
+    "ridge" = 0
+  )
   y <- as.factor(train_target)
-  X <- model.matrix(~ ., data = train_data)[, -1, drop = FALSE]
+  X <- model.matrix(~., data = train_data)[, -1, drop = FALSE]
   set.seed(seed)
-  cv_fit      <- glmnet::cv.glmnet(x = X, y = y, family = "multinomial", alpha = alpha_val, nfolds = nfolds)
+  cv_fit <- glmnet::cv.glmnet(x = X, y = y, family = "multinomial", alpha = alpha_val, nfolds = nfolds)
   final_model <- glmnet::glmnet(x = X, y = y, family = "multinomial", alpha = alpha_val, lambda = cv_fit$lambda.min)
   list(model = final_model, lambda = cv_fit$lambda.min)
 }
@@ -304,19 +308,19 @@ print(clusters_trig_modulators_resultat$regression$res_classification)
 # ============================================================================ #
 
 clusters_trig_modulators_predictions_reg <- lapply(c("all", "reduced"), function(feature_set) {
-  ct         <- clusters_trig_modulators_resultat$regression$res_classification$coef_table
+  ct <- clusters_trig_modulators_resultat$regression$res_classification$coef_table
   train_full <- trig_train_final[, !names(trig_train_final) %in% c("Cluster")]
-  val_full   <- trig_valid_final[, !names(trig_valid_final) %in% c("Cluster")]
+  val_full <- trig_valid_final[, !names(trig_valid_final) %in% c("Cluster")]
 
   fits <- lapply(c("multinom_fit", "elastic", "lasso", "ridge"), function(fit_type) {
     print(paste(feature_set, fit_type))
 
     if (feature_set == "all") {
       val_data <- val_full
-      model    <- clusters_trig_modulators_resultat$regression$res_classification[[fit_type]]
+      model <- clusters_trig_modulators_resultat$regression$res_classification[[fit_type]]
     } else {
-      sel_vars  <- get_selected_vars_reg(fit_type, ct, train_full)
-      val_data  <- val_full[, sel_vars, drop = FALSE]
+      sel_vars <- get_selected_vars_reg(fit_type, ct, train_full)
+      val_data <- val_full[, sel_vars, drop = FALSE]
       train_sub <- train_full[, sel_vars, drop = FALSE]
       model <- if (fit_type == "multinom_fit") {
         retrain_multinom(train_sub, clusters_training)
@@ -328,8 +332,8 @@ clusters_trig_modulators_predictions_reg <- lapply(c("all", "reduced"), function
     reg_repeated <- lapply(1:100, function(s) {
       set.seed(41 + s)
       rows_to_sample <- sample(nrow(val_data), replace = TRUE)
-      sampled_df     <- val_data[rows_to_sample, ]
-      sampled_cls    <- clusters_validation[rows_to_sample]
+      sampled_df <- val_data[rows_to_sample, ]
+      sampled_cls <- clusters_validation[rows_to_sample]
 
       if (fit_type == "multinom_fit") {
         y_new <- stats::predict(object = model, newdata = sampled_df)
@@ -340,7 +344,7 @@ clusters_trig_modulators_predictions_reg <- lapply(c("all", "reduced"), function
           type   = "class"
         )))
       }
-      y_obs  <- sampled_cls
+      y_obs <- sampled_cls
       cm_raw <- caret::confusionMatrix(
         factor(y_new, levels = unique(clusters_training)),
         factor(y_obs, levels = unique(clusters_training))
@@ -349,7 +353,7 @@ clusters_trig_modulators_predictions_reg <- lapply(c("all", "reduced"), function
       list(cm_reg = cm_reg, df_pred = cbind.data.frame(y_new, y_obs))
     })
 
-    cm_reg_rep  <- do.call(rbind, lapply(reg_repeated, function(x) x$cm_reg))
+    cm_reg_rep <- do.call(rbind, lapply(reg_repeated, function(x) x$cm_reg))
     df_pred_rep <- do.call(cbind, lapply(reg_repeated, function(x) x$df_pred))
     list(cm_reg_rep = cm_reg_rep, df_pred_rep = df_pred_rep)
   })
@@ -396,7 +400,7 @@ p_clusters_trig_modulators_Boruta <- ggplot(Boruta_data_clusters_trig_modulators
     axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 6),
     legend.position = c(.1, .8),
     legend.background = element_rect(fill = ggplot2::alpha("white", 0.5)),
-    legend.key       = element_rect(fill = ggplot2::alpha("white", 0.5)),
+    legend.key = element_rect(fill = ggplot2::alpha("white", 0.5)),
     axis.text.y = element_text(size = 8),
     plot.margin = ggplot2::margin(5.5, 25, 5.5, 5.5)
   ) +
