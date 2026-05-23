@@ -2276,10 +2276,10 @@ heat_matrix_all_scaled <- as.data.frame(scale(heat_matrix_all_corr))
 
 fa_eigenvalues <- eigen(cor(heat_matrix_all_scaled))
 scree(heat_matrix_all_scaled, pc = FALSE)
-fa.parallel(heat_matrix_all_scaled, fa = "fa")
+nf_all  <- fa.parallel(heat_matrix_all_scaled, fa = "fa")
 
 # --- 6-factor solution (ML, promax) as reference --------------------------
-Nfacs <- 6
+Nfacs <- nf_all$nfact
 
 fa_fit <- factanal(heat_matrix_all_scaled, Nfacs, rotation = "promax", scores = "Bartlett")
 print(fa_fit, digits = 2, cutoff = 0.3, sort = TRUE)
@@ -2294,7 +2294,7 @@ fa.diagram(fa_loadings)
 # --- Principal axis factoring (PA): robust to Heywood cases ---------------
 # 6-factor PA solution
 fa_fit_pa6 <- psych::fa(heat_matrix_all_scaled,
-  nfactors = 6,
+  nfactors = Nfacs,
   fm = "pa", rotate = "oblimin"
 )
 print(fa_fit_pa6, digits = 2, cut = 0.3, sort = TRUE)

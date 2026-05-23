@@ -37,13 +37,13 @@ R/
 │   └── build_analysis_dataset.R
 │
 ├── Reported analyses
-│   ├── 01_stage1_trigeminal_data_space_exploration.R
-│   ├── 02_stage1_trigeminal_clustering_phenotype_derivation.R
-│   ├── 03_stage1_trigeminal_cluster_classification.R
-│   ├── 04_stage1_trigeminal_cluster_interpretation.R
-│   ├── 05_psychophysical_regression_analysis.R
-│   ├── 06_stage2_modulator_identification_psychophysical.R
-│   └── 07_stage2_modulator_identification_clusters.R
+│   ├── 01_stage1_2_trigeminal_data_space_exploration.R
+│   ├── 02_stage3_trigeminal_clustering_phenotype_derivation.R
+│   ├── 03_stage3_trigeminal_cluster_interpretation.R
+│   ├── 04_stage3_psychophysical_regression_analysis.R
+│   ├── 05_stage3_modulator_identification_psychophysical.R
+│   ├── 06_stage3_modulator_identification_clusters.R
+│   └── 07_stage3_trigeminal_cluster_modulators_interpretation.R
 │
 └── Supporting / exploratory scripts
     ├── descriptive_statistics_overview.R
@@ -76,12 +76,11 @@ Performed on observed, non-imputed data:
 - Sex differences assessed using Kruskal–Wallis tests with effect sizes
 
 ### Stage 2: Exploratory analysis
-**File:** `R/01_stage1_trigeminal_data_space_exploration.R`
+**File:** `R/01_stage1_2_trigeminal_data_space_exploration.R`
 
 Performed on the complete imputed dataset obtained by merging the independently imputed training and validation subsets:
 - Correlation analysis of 21 trigeminal variables comprising 3 psychophysical measures and 18 TriFunQ items
 - Principal component analysis
-- Factor analysis for questionaire item grouping
 - Variable-importance ranking
 - Exploratory screening of 220 candidate modulators against psychophysical measures
 
@@ -89,18 +88,19 @@ These analyses are descriptive and hypothesis-generating.
 
 ### Stage 3: Machine learning framework
 **Files:**
-- `R/02_stage1_trigeminal_clustering_phenotype_derivation.R`
-- `R/03_stage1_trigeminal_cluster_classification.R`
-- `R/04_stage1_trigeminal_cluster_interpretation.R`
-- `R/05_psychophysical_regression_analysis.R`
-- `R/06_stage2_modulator_identification_psychophysical.R`
-- `R/07_stage2_modulator_identification_clusters.R`
+- `R/02_stage3_trigeminal_clustering_phenotype_derivation.R`
+- `R/03_stage3_trigeminal_cluster_interpretation.R`
+- `R/04_stage3_psychophysical_regression_analysis.R`
+- `R/05_stage3_modulator_identification_psychophysical.R`
+- `R/06_stage3_modulator_identification_clusters.R`
+- `R/07_stage3_trigeminal_cluster_modulators_interpretation.R`
 
 Performed using training/validation separation:
-- Unsupervised derivation of a composite trigeminal phenotype
+- Unsupervised derivation of a composite trigeminal phenotype (clustering)
+- Factor analysis for phenotype interpretation and hypothesis testing
 - Supervised prediction of psychophysical measures
 - Supervised classification of cluster membership
-- Identification of non-trigeminal candidate modulators
+- Identification of non-trigeminal candidate modulators (psychophysical and cluster-based)
 
 All model development, including clustering, feature selection, and hyperparameter tuning, is confined to the training set; generalization is evaluated in the held-out validation set.
 
@@ -153,12 +153,12 @@ All analysis scripts load required helper functions through the internal depende
 
 ### 4. Machine learning analyses
 
-`source("R/02_stage1_trigeminal_clustering_phenotype_derivation.R")`
-`source("R/03_stage1_trigeminal_cluster_classification.R")`
-`source("R/04_stage1_trigeminal_cluster_interpretation.R")`
-`source("R/05_psychophysical_regression_analysis.R")`
-`source("R/06_stage2_modulator_identification_psychophysical.R")`
-`source("R/07_stage2_modulator_identification_clusters.R")`
+`source("R/01_stage1_2_trigeminal_data_space_exploration.R")`
+`source("R/03_stage3_trigeminal_cluster_classification.R")`
+`source("R/04_stage3_trigeminal_cluster_interpretation.R")`
+`source("R/05_stage3_psychophysical_regression_analysis.R")`
+`source("R/06_stage3_modulator_identification_psychophysical.R")`
+`source("R/07_stage3_modulator_identification_clusters.R")`
 
 ### 5. Optional supporting analyses
 

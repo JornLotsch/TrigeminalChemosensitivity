@@ -819,46 +819,150 @@ tab_filteredone_feature_classification
 
 
 # ============================================================================ #
-# 13. INTERPREST CLUSTERS BASED ON FACTOR ANALYIS
+# 13. INTERPRET CLUSTERS BASED ON FACTOR ANALYIS
 # ============================================================================ #
 
-# Load coordinates for later cluster interpretation
-FA_coordinates <- read.csv("FA_PA_coordinates.csv", row.names = 1)
-FA_coordinates$ID <- rownames(FA_coordinates)
 
-FA_coordinates_training <- merge(
-  FA_coordinates,
-  trig_clusters_training_data[, c("ID", "Cluster")],
-  by = "ID"
+heat_matrix_training_scaled <- as.data.frame(scale(trig_clusters_training_data[, !names(trig_clusters_training_data) %in% c("Cluster")]))
+
+
+fa_eigenvalues <- eigen(cor(heat_matrix_training_scaled))
+scree(heat_matrix_training_scaled, pc = FALSE)
+nf_train  <- fa.parallel(heat_matrix_training_scaled, fa = "fa")
+
+# --- 6-factor solution (ML, promax) as reference --------------------------
+Nfacs <- nf_train$nfact
+
+fa_training_fit <- factanal(heat_matrix_training_scaled, Nfacs, rotation = "promax", scores = "Bartlett")
+print(fa_training_fit, digits = 2, cutoff = 0.3, sort = TRUE)
+
+fa_training_loadings_2d <- fa_training_fit$loadings[, 1:2]
+plot(fa_training_loadings_2d, type = "n")
+text(fa_training_loadings_2d, labels = names(heat_matrix_training_scaled), cex = .7)
+
+fa_training_loadings <- fa_training_fit$loadings
+fa.diagram(fa_training_loadings)
+
+# --- Principal axis factoring (PA): robust to Heywood cases ---------------
+# 6-factor PA solution
+fa_training_fit_pa6 <- psych::fa(heat_matrix_training_scaled,
+                        nfactors = Nfacs,
+                        fm = "pa", rotate = "oblimin"
+)
+print(fa_training_fit_pa6, digits = 2, cut = 0.3, sort = TRUE)
+fa.diagram(fa_training_fit_pa6)
+
+# 2-factor PA solution: tests Sensitivity vs. Avoidance hypothesis
+fa_training_fit_pa2 <- psych::fa(heat_matrix_training_scaled,
+                        nfactors = 2,
+                        fm = "pa", rotate = "oblimin"
+)
+print(fa_training_fit_pa2, digits = 2, cut = 0.3, sort = TRUE)
+fa.diagram(fa_training_fit_pa2)
+
+fa_training_fit_pa2
+
+# Loading plot for 2-factor PA solution
+fa_training_loadings_df <- as.data.frame(fa_training_fit_pa2$loadings[, 1:2])
+colnames(fa_training_loadings_df) <- c("PA1_Hypersensitivity", "PA2_OcularSensitivity")
+fa_training_loadings_df$item <- rownames(fa_training_loadings_df)
+
+# Categorize items for color
+fa_training_loadings_df$group <- dplyr::case_when(
+  fa_training_loadings_df$PA1_Hypersensitivity >= 0.30 ~ "Trigeminal hypersensitivity",
+  fa_training_loadings_df$PA2_OcularSensitivity >= 0.30 ~ "Ocular chemosensitivity",
+  TRUE ~ "No clear loading"
 )
 
-FA_coordinates_training$ID <- NULL
+fa_training_loadings_df$item <- stringr::str_wrap(fa_training_loadings_df$item, width = 35)
+
+fa_training_plot <- ggplot(fa_training_loadings_df, aes(
+  x = PA1_Hypersensitivity, y = PA2_OcularSensitivity,
+  color = group, label = item
+)) +
+  geom_point(size = 3) +
+  ggrepel::geom_text_repel(size = 3, max.overlaps = 20) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey60") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey60") +
+  geom_vline(xintercept = 0.30, linetype = "dotted", color = "grey40") +
+  geom_hline(yintercept = 0.30, linetype = "dotted", color = "grey40") +
+  scale_color_manual(values = c(
+    "Trigeminal hypersensitivity" = "#E64B35",
+    "Ocular chemosensitivity" = "#4DBBD5",
+    "No clear loading" = "grey50"
+  )) +
+  labs(
+    x = "PA1 – Trigeminal chemical hypersensitivity",
+    y = "PA2 – Ocular chemosensitivity",
+    color = NULL, title = "Factor analysis of trigeminal variables (training data)"
+  ) +
+  theme_bw(base_size = 11) +
+  theme(legend.position = "bottom")
+
+print(fa_training_plot)
+
+######################### Save Plot ######################################################
+
+
+message("Saving plot...")
+ggsave(
+  filename = "fa_training_plot.svg",
+  fa_training_plot,
+  width = 12,
+  height = 12,
+  dpi = 300
+)
+ggsave(
+  filename = "fa_training_plot.png",
+  fa_training_plot,
+  width = 12,
+  height = 12,
+  dpi = 300
+)
+
+######################### Apply results to validation data ######################################################
+
+# Scale validation data using training mean/SD (same coordinate system as training)
+training_raw <- trig_clusters_training_data[, !names(trig_clusters_training_data) %in% c("Cluster")]
+heat_matrix_validation_scaled <- as.data.frame(
+  scale(
+    trig_clusters_validation_data[, !names(trig_clusters_validation_data) %in% c("Cluster")],
+    center = colMeans(training_raw),
+    scale  = apply(training_raw, 2, sd)
+  )
+)
+
+
+# Project validation data into FA space using trained 2-factor model
+fa_validation_scores <- predict(fa_training_fit_pa2, data = heat_matrix_validation_scaled)
+
+# Training FA coordinates with cluster labels
+FA_coordinates_training <- data.frame(
+  fa_training_fit_pa2$scores,
+  Cluster = trig_clusters_training_data$Cluster
+)
 
 FA_coordinates_training_means <- FA_coordinates_training %>%
   group_by(Cluster) %>%
   summarise(
-    mean_col1 = mean(PA1, na.rm = TRUE),
-    mean_col2 = mean(PA2, na.rm = TRUE),
+    mean_PA1 = mean(PA1, na.rm = TRUE),
+    mean_PA2 = mean(PA2, na.rm = TRUE),
     .groups = "drop"
   )
 
-
-FA_coordinates_validation <- merge(
-  FA_coordinates,
-  trig_clusters_validation_data[, c("ID", "Cluster")],
-  by = "ID"
+# Validation FA coordinates with cluster labels
+FA_coordinates_validation <- data.frame(
+  fa_validation_scores,
+  Cluster = trig_clusters_validation_data$Cluster
 )
-
-FA_coordinates_validation$ID <- NULL
 
 FA_coordinates_validation_means <- FA_coordinates_validation %>%
   group_by(Cluster) %>%
   summarise(
-    mean_col1 = mean(PA1, na.rm = TRUE),
-    mean_col2 = mean(PA2, na.rm = TRUE),
+    mean_PA1 = mean(PA1, na.rm = TRUE),
+    mean_PA2 = mean(PA2, na.rm = TRUE),
     .groups = "drop"
   )
-
 
 print(FA_coordinates_training_means)
 print(FA_coordinates_validation_means)
