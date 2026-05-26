@@ -529,6 +529,16 @@ condensed_ENT_dictionary <- c(
 )
 
 
+# Rename dictionary some onehot recoded variables to English versions
 
-
+condensed_smell_taste_dictionary <- c(
+  "reduced_smell_and_taste_ability_what_feiner.Geschmack" = "reduced_smell_and_taste_ability_what_finer_taste",
+  "reduced_smell_and_taste_ability_what_feiner.Geschmack..Schmecken" = "reduced_smell_and_taste_ability_what_finer_taste",
+  "reduced_smell_and_taste_ability_what_n" = "reduced_smell_and_taste_ability_what_n",
+  "reduced_smell_and_taste_ability_what_Riechen" = "reduced_smell_and_taste_ability_what_smell",
+  "reduced_smell_and_taste_ability_what_Riechen..feiner.Geschmack" = "reduced_smell_and_taste_ability_what_smell_finer_taste",
+  "reduced_smell_and_taste_ability_what_Riechen..feiner.Geschmack..Schmecken" = "reduced_smell_and_taste_ability_what_smell_finer_taste",
+  "reduced_smell_and_taste_ability_what_Riechen..Schmecken" = "reduced_smell_and_taste_ability_what_smell_taste",
+  "reduced_smell_and_taste_ability_what_Schmecken" = "reduced_smell_and_taste_ability_what_taste"
+)
 

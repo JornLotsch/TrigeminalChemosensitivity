@@ -1265,6 +1265,17 @@ run_penalized_multinomial_remove_colinear_all <- function(train_data,
   ))
 }
 
+
+# Rename some onehot recoded variables to English versions
+recode_variable <- function(df, dict, col = "variable") {
+  x <- df[[col]]
+  idx <- x %in% names(dict)
+  x[idx] <- unname(dict[x[idx]])
+  df[[col]] <- x
+  df
+}
+
+
 ################################################################################
 # END OF UTILS.R
 ################################################################################

@@ -874,14 +874,15 @@ fa_training_loadings_df$group <- dplyr::case_when(
   TRUE ~ "No clear loading"
 )
 
-fa_training_loadings_df$item <- stringr::str_wrap(fa_training_loadings_df$item, width = 35)
+fa_training_loadings_df$item2 <- stringr::str_wrap(fa_training_loadings_df$item, width = 35)
 
+set.seed(42)
 fa_training_plot <- ggplot(fa_training_loadings_df, aes(
   x = PA1_Hypersensitivity, y = PA2_OcularSensitivity,
-  color = group, label = item
+  color = group, label = item2
 )) +
   geom_point(size = 3) +
-  ggrepel::geom_text_repel(size = 3, max.overlaps = 20) +
+  ggrepel::geom_label_repel(size = 3, max.overlaps = 30, force = TRUE,box.padding = 1.5) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "grey60") +
   geom_vline(xintercept = 0, linetype = "dashed", color = "grey60") +
   geom_vline(xintercept = 0.30, linetype = "dotted", color = "grey40") +
@@ -908,8 +909,8 @@ message("Saving plot...")
 ggsave(
   filename = "fa_training_plot.svg",
   fa_training_plot,
-  width = 12,
-  height = 12,
+  width = 10,
+  height = 10,
   dpi = 300
 )
 ggsave(

@@ -2435,7 +2435,15 @@ names(regression_analysis_complete_imputed_data_all_results) <-
     "StdError_colinear_removed", "t.value_colinear_removed", "glm_p_colinear_removed", "glm_selected_colinear_removed"
   )
 
-write.csv(regression_analysis_complete_imputed_data_all_results,
+# Rename a few variables to have them in English
+regression_analysis_complete_imputed_data_all_results_renamed_en <- regression_analysis_complete_imputed_data_all_results
+regression_analysis_complete_imputed_data_all_results_renamed_en <-
+  recode_variable(regression_analysis_complete_imputed_data_all_results_renamed_en, condensed_smell_taste_dictionary)
+
+# Replace NAs in co-linearity cleaned glm with "Removed"
+regression_analysis_complete_imputed_data_all_results_renamed_en$glm_selected_colinear_removed[is.na(regression_analysis_complete_imputed_data_all_results_renamed_en$glm_selected_colinear_removed)] <- "Removed"
+
+write.csv(regression_analysis_complete_imputed_data_all_results_renamed_en,
   "regression_analysis_complete_dataset_modulators_all_targets.csv",
   row.names = FALSE
 )
@@ -2453,9 +2461,12 @@ regression_analysis_complete_imputed_data_all_results_plots <- pbmcapply::pbmcla
     actual_data <- regression_analysis_complete_imputed_data_all_results[regression_analysis_complete_imputed_data_all_results$target_name == Target, ]
     actual_data <- actual_data %>% dplyr::mutate(Score_id = row_number())
 
+    # 1st, rename a few variables to have them in English
+    actual_data_renamed_en <- actual_data
+    actual_data_renamed_en <- recode_variable(actual_data_renamed_en, condensed_smell_taste_dictionary)
 
     # Create outer label data with Score and Reference
-    label_data <- actual_data %>%
+    label_data <- actual_data_renamed_en %>%
       dplyr::distinct(variable, Score_id) %>%
       dplyr::arrange(Score_id)
 
@@ -2473,12 +2484,13 @@ regression_analysis_complete_imputed_data_all_results_plots <- pbmcapply::pbmcla
     ######################### Create Circular Plot ######################################################
 
 
+
     message("Creating circular variant scores plot...")
 
     p_regression_analysis_complete_imputed_data <- ggplot() +
       # glm_selected ring (innermost)
       geom_rect(
-        data = actual_data,
+        data = actual_data_renamed_en,
         aes(
           xmin = Score_id - 0.45,
           xmax = Score_id + 0.45,
@@ -2493,7 +2505,7 @@ regression_analysis_complete_imputed_data_all_results_plots <- pbmcapply::pbmcla
 
       # ridge_selected ring
       geom_rect(
-        data = actual_data,
+        data = actual_data_renamed_en,
         aes(
           xmin = Score_id - 0.45,
           xmax = Score_id + 0.45,
@@ -2508,7 +2520,7 @@ regression_analysis_complete_imputed_data_all_results_plots <- pbmcapply::pbmcla
 
       # lasso_selected ring
       geom_rect(
-        data = actual_data,
+        data = actual_data_renamed_en,
         aes(
           xmin = Score_id - 0.45,
           xmax = Score_id + 0.45,
@@ -2523,7 +2535,7 @@ regression_analysis_complete_imputed_data_all_results_plots <- pbmcapply::pbmcla
 
       # elastic_selected ring (outermost)
       geom_rect(
-        data = actual_data,
+        data = actual_data_renamed_en,
         aes(
           xmin = Score_id - 0.45,
           xmax = Score_id + 0.45,
@@ -2604,7 +2616,7 @@ names(regression_analysis_complete_imputed_data_all_results_plots) <- names(psyc
 ######################### Combine Plot ######################################################
 
 p_regression_analysis_complete_imputed_data_all_results_final <-
-  wrap_plots(plots2, nrow = 1, guides = "keep") +
+  wrap_plots(regression_analysis_complete_imputed_data_all_results_plots, nrow = 1, guides = "keep") +
     plot_layout(widths = rep(1, length(plots2))) +
     plot_annotation(
       title = "Regression analysis of modulators of psychophysical measures of trigeminal sensitivity",
