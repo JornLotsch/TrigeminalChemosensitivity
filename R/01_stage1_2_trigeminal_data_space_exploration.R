@@ -2444,8 +2444,12 @@ regression_analysis_complete_imputed_data_all_results_renamed_en <-
 regression_analysis_complete_imputed_data_all_results_renamed_en$glm_selected_colinear_removed[is.na(regression_analysis_complete_imputed_data_all_results_renamed_en$glm_selected_colinear_removed)] <- "Removed"
 
 write.csv(regression_analysis_complete_imputed_data_all_results_renamed_en,
-  "regression_analysis_complete_dataset_modulators_all_targets.csv",
-  row.names = FALSE
+          "regression_analysis_complete_dataset_modulators_all_targets.csv",
+          row.names = FALSE
+)
+write.csv(regression_analysis_complete_imputed_data_all_results_renamed_en,
+          "results/regression_analysis_complete_dataset_modulators_all_targets.csv",
+          row.names = FALSE
 )
 
 # ========================================================================== #

@@ -872,6 +872,7 @@ res_sex_validation
 # ============================================================================ #
 
 write.csv(coef_tables_combined, "regression_modulators_coef_tables_combined.csv", row.names = FALSE)
+write.csv(coef_tables_combined, "results/regression_modulators_coef_tables_combined.csv", row.names = FALSE)
 
 write.csv(validation_table_modulators, "regression_modulators_final_table_modulators.csv", row.names = FALSE)
 

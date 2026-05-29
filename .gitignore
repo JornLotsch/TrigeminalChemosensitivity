@@ -35,3 +35,12 @@ Hopkins_tests.R
 *OLD*
 .positai
 trigeminal_measures_clustering_y_trig_2.R
+*.csv
+!results/clusters_trig_classification_reg.csv
+!results/clusters_trig_classification_rf.csv
+!results/clusters_trig_coef_table_full.csv
+!results/clusters_trig_modulators_coef_table_full.csv
+!results/clusters_trig_sig_predictors.csv
+!results/regression_analysis_complete_dataset_modulators_all_targets.csv
+!results/regression_coef_tables_combined.csv
+!results/regression_modulators_coef_tables_combined.csv

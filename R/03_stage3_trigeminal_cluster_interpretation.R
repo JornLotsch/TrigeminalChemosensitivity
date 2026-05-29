@@ -709,6 +709,12 @@ write.csv(classification_table_rf, "clusters_trig_classification_rf.csv", row.na
 write.csv(coef_table_clusters, "clusters_trig_coef_table_full.csv", row.names = FALSE)
 write.csv(Boruta_data$importance[!duplicated(Boruta_data$importance$Feature), ], "Boruta_importance_trigeminal_sensitivity_clusters.csv")
 
+write.csv(sig_predictors_clusters, "results/clusters_trig_sig_predictors.csv", row.names = FALSE)
+write.csv(classification_table_reg, "results/clusters_trig_classification_reg.csv", row.names = FALSE)
+write.csv(classification_table_rf, "results/clusters_trig_classification_rf.csv", row.names = FALSE)
+write.csv(coef_table_clusters, "results/clusters_trig_coef_table_full.csv", row.names = FALSE)
+write.csv(Boruta_data$importance[!duplicated(Boruta_data$importance$Feature), ], "Boruta_importance_trigeminal_sensitivity_clusters.csv")
+
 cat("Saved: clusters_trig_sig_predictors.csv\n")
 cat("Saved: clusters_trig_classification_reg.csv\n")
 cat("Saved: clusters_trig_classification_rf.csv\n")

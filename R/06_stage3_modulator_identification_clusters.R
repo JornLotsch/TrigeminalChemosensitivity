@@ -587,6 +587,7 @@ write.csv(sig_predictors_clusters_trig_modulators, "clusters_trig_modulators_sig
 write.csv(classification_table_clusters_trig_modulators_reg, "clusters_trig_modulators_classification_reg.csv", row.names = FALSE)
 write.csv(classification_table_clusters_trig_modulators_rf, "clusters_trig_modulators_classification_rf.csv", row.names = FALSE)
 write.csv(coef_table_clusters_trig_modulators, "clusters_trig_modulators_coef_table_full.csv", row.names = FALSE)
+write.csv(coef_table_clusters_trig_modulators, "results/clusters_trig_modulators_coef_table_full.csv", row.names = FALSE)
 write.csv(Boruta_data_clusters_trig_modulators$importance[!duplicated(Boruta_data_clusters_trig_modulators$importance$Feature), ], "Boruta_importance_trigeminal_sensitivity_clusters_modulators.csv")
 
 cat("Saved: clusters_trig_modulators_sig_predictors.csv\n")

@@ -48,7 +48,7 @@
 # trigeminal variables (20 predictors per outcome).\n
 # Model Development: Training set only (n=800)
 # Validation: Independent held-out set (n=201)
-# Regression Methods: OLS, Ridge, Lasso, Elastic Net (α=0.5), 
+# Regression Methods: OLS, Ridge, Lasso, Elastic Net (α=0.5),
 # Random Forest\n# Hyperparameter Tuning: 5-fold cross-validation for λ; grid search for RF
 # Performance Assessment: Nonlinear LS (predicted vs. observed) on validation set
 # See README.md \"PART 2\" > \"Prediction of psychophysical measures (from trigeminal variables)
@@ -501,6 +501,7 @@ coef_tables_combined <- dplyr::bind_rows(
   })
 )
 write.csv(coef_tables_combined, "regression_coef_tables_combined.csv", row.names = FALSE)
+write.csv(coef_tables_combined, "results/regression_coef_tables_combined.csv", row.names = FALSE)
 
 write.csv(validation_table, "regression_final_table.csv", row.names = FALSE)
 
