@@ -59,9 +59,14 @@ Python/
 ├── cABC_analysis.py
 ├── trigeminal_measures_exploreTukey.py
 └── explore_tukey_lop.py
+
+results/
+└── [Analysis results files (.csv) referenced in the manuscript]
 ```
 
 Raw and processed data files are stored locally and are **not version-controlled** in this repository.
+
+The `results/` directory contains output files (in CSV format) from the analyses reported in the manuscript and described below.
 
 ---
 
