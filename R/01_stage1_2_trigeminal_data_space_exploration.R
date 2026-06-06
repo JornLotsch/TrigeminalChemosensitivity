@@ -1118,6 +1118,11 @@ p_combined_psychophysical_trig_measures_obs[[7]] <- p_combined_psychophysical_tr
 # Skip p8 (placeholder)
 p_combined_psychophysical_trig_measures_obs[[9]] <- p_combined_psychophysical_trig_measures_obs[[9]] + ggtitle("G") + theme(plot.title = element_text(face = "bold", hjust = 0))
 
+# Add 10% indicator lines
+p_combined_psychophysical_trig_measures_obs[[1]] <- p_combined_psychophysical_trig_measures_obs[[1]] +  geom_vline(xintercept = 90, color = "salmon", linetype = "dashed")
+p_combined_psychophysical_trig_measures_obs[[7]] <- p_combined_psychophysical_trig_measures_obs[[7]] +
+  geom_vline(xintercept = -slog(max(trigeminale_data$`AmmoLa intensity`, na.rm = TRUE) + 1 -90 ), color = "salmon", linetype = "dashed")
+
 p_combined_psychophysical_trig_measures_obs <- p_combined_psychophysical_trig_measures_obs +
   plot_annotation(
     title = "Trigeminal psychophysics workflow",
@@ -1131,6 +1136,7 @@ p_combined_psychophysical_trig_measures_obs <- p_combined_psychophysical_trig_me
 print(p_combined_psychophysical_trig_measures_obs)
 
 ggsave("p_combined_psychophysical_trig_measures_obs.svg", p_combined_psychophysical_trig_measures_obs, width = 15, height = 12, dpi = 300)
+ggsave("p_combined_psychophysical_trig_measures_obs.png", p_combined_psychophysical_trig_measures_obs, width = 15, height = 12, dpi = 300)
 
 # ========================================================================== #
 # CORRELATION MATRIX PREPARATION
