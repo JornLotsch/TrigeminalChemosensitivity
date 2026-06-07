@@ -179,8 +179,7 @@ All analysis scripts load required helper functions through the internal depende
 ## Citation
 
 Lötsch J, Weise S, Himmelspach A, Bormann A, Hummel T.
-**Phenotypes of trigeminal chemosensitivity in a general-population sample**.
-2026, in preparation.
+**Mapping population diversity in intranasal trigeminal chemosensitivity with machine learning**. 2026, in preparation.
 
 ---
 
