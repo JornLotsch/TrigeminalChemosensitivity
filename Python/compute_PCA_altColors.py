@@ -421,6 +421,9 @@ def perform_pca(data, target=None, PC_criterion="KaiserGuttman", minvar=0.9,
             ax8.set_ylabel("Sum (|Z loadings| * explained variance)")
             ax8.set_title("Variable importance")
             ax8.set(xticklabels=[])
+            
+            fig.savefig("PCA.svg", format="svg", bbox_inches='tight')
+
 
         elif plotReduced == 4:
             fig = plt.figure(figsize=(20, 20))

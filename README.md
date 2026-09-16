@@ -179,7 +179,7 @@ All analysis scripts load required helper functions through the internal depende
 ## Citation
 
 Lötsch J, Weise S, Himmelspach A, Bormann A, Hummel T.
-**Mapping population diversity in intranasal trigeminal chemosensitivity with machine learning**. 2026, in preparation.
+**Mapping population diversity in intranasal trigeminal chemosensitivity with machine learning**. Chemical Senses 2026 (in revision).
 
 ---
 
